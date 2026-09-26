@@ -20,6 +20,12 @@ const router = createRouter({
         { path: '', name: 'home', component: () => import('@/views/user/ItemList.vue') },
         { path: 'items/:id', name: 'item-detail', component: () => import('@/views/user/ItemDetail.vue') },
         {
+          path: 'my-claims',
+          name: 'my-claims',
+          component: () => import('@/views/user/MyClaims.vue'),
+          meta: { requireAuth: true },
+        },
+        {
           path: 'publish',
           name: 'publish',
           component: () => import('@/views/user/Publish.vue'),
@@ -36,6 +42,7 @@ const router = createRouter({
       children: [
         { path: '', redirect: '/admin/audit' },
         { path: 'audit', name: 'admin-audit', component: () => import('@/views/admin/AuditList.vue') },
+        { path: 'claims', name: 'admin-claims', component: () => import('@/views/admin/ClaimAudit.vue') },
         { path: 'items', name: 'admin-items', component: () => import('@/views/admin/ItemManage.vue') },
       ],
     },

@@ -1,4 +1,12 @@
-import type { Item, ItemQuery, ItemStatus, PageResult } from '@/types/api'
+import type {
+  Item,
+  ItemQuery,
+  ItemStatus,
+  Claim,
+  ClaimQuery,
+  ClaimStatus,
+  PageResult,
+} from '@/types/api'
 
 // ===== 总开关 =====
 // 后端接口通了以后，把这里改成 false，全项目就切到真实接口
@@ -174,4 +182,89 @@ export function mockUpdateItemStatus(id: number, status: ItemStatus): Item {
 // 删除：把这条从数组里过滤掉
 export function mockDeleteItem(id: number): void {
   mockItems = mockItems.filter((it) => it.id !== id)
+}
+
+// ===== 认领申请 =====
+
+let mockClaims: Claim[] = [
+  {
+    id: 1,
+    itemId: 1,
+    itemTitle: '黑色钱包',
+    userId: 1,
+    username: 'zhangsan',
+    contact: '138****1234',
+    message: '钱包是我丢的，里面有我的学生卡，卡号后四位 6789。',
+    status: 'pending',
+    createdAt: '2026-09-24 10:20',
+  },
+  {
+    id: 2,
+    itemId: 6,
+    itemTitle: '银色保温杯',
+    userId: 1,
+    username: 'zhangsan',
+    contact: '微信 fu****',
+    message: '杯底有个小凹痕，是我的。',
+    status: 'approved',
+    createdAt: '2026-09-25 09:05',
+  },
+]
+
+// 认领：提交申请。默认状态是待审核，等管理员处理
+export function mockCreateClaim(data: Partial<Claim>): Claim {
+  const maxId = mockClaims.reduce((max, c) => (c.id > max ? c.id : max), 0)
+  const claim: Claim = {
+    id: maxId + 1,
+    itemId: data.itemId ?? 0,
+    itemTitle: data.itemTitle ?? '',
+    userId: 1,
+    username: 'zhangsan',
+    contact: data.contact ?? '',
+    message: data.message ?? '',
+    status: 'pending',
+    createdAt: new Date().toLocaleString('zh-CN', { hour12: false }),
+  }
+  mockClaims = [claim, ...mockClaims]
+  return claim
+}
+
+// 认领：我的申请（真后端会按 token 里的 user_id 过滤，这里写死 1）
+export function mockGetMyClaims(query: ClaimQuery): PageResult<Claim> {
+  const { page = 1, pageSize = 10, status } = query
+
+  let rows = mockClaims.filter((c) => c.userId === 1)
+  if (status) rows = rows.filter((c) => c.status === status)
+
+  const start = (page - 1) * pageSize
+  return {
+    list: rows.slice(start, start + pageSize),
+    total: rows.length,
+    page,
+    pageSize,
+  }
+}
+
+// 认领：管理端看全部申请
+export function mockGetClaimList(query: ClaimQuery): PageResult<Claim> {
+  const { page = 1, pageSize = 10, status } = query
+
+  let rows = [...mockClaims]
+  if (status) rows = rows.filter((c) => c.status === status)
+
+  const start = (page - 1) * pageSize
+  return {
+    list: rows.slice(start, start + pageSize),
+    total: rows.length,
+    page,
+    pageSize,
+  }
+}
+
+// 认领：审核
+export function mockAuditClaim(id: number, status: ClaimStatus): Claim {
+  const found = mockClaims.find((c) => c.id === id)
+  if (!found) throw new Error('认领申请不存在')
+  found.status = status
+  return found
 }

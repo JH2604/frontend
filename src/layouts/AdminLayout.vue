@@ -7,6 +7,7 @@ const userStore = useUserStore()
 
 const menus = [
   { path: '/admin/audit', title: '发布审核' },
+  { path: '/admin/claims', title: '认领审核' },
   { path: '/admin/items', title: '物品管理' },
 ]
 

@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import type { Item } from '@/types/api'
 import { getItemDetail } from '@/api/item'
+import { createClaim } from '@/api/claim'
 import StatusTag from '@/components/StatusTag.vue'
 
 const route = useRoute()
@@ -24,8 +25,39 @@ async function fetchDetail() {
   }
 }
 
-function handleClaim() {
-  ElMessage.success('认领申请已提交（Mock）')
+// ===== 认领申请弹窗 =====
+const claimVisible = ref(false)
+const claimSubmitting = ref(false)
+const claimForm = reactive({
+  contact: '',
+  message: '',
+})
+
+function openClaim() {
+  claimForm.contact = ''
+  claimForm.message = ''
+  claimVisible.value = true
+}
+
+async function submitClaim() {
+  if (!claimForm.contact.trim()) {
+    ElMessage.warning('请填写联系方式，方便管理员联系你')
+    return
+  }
+
+  claimSubmitting.value = true
+  try {
+    await createClaim({
+      itemId: detail.value?.id,
+      itemTitle: detail.value?.title,
+      contact: claimForm.contact,
+      message: claimForm.message,
+    })
+    claimVisible.value = false
+    ElMessage.success('认领申请已提交，等待管理员审核')
+  } finally {
+    claimSubmitting.value = false
+  }
 }
 
 onMounted(fetchDetail)
@@ -57,11 +89,39 @@ onMounted(fetchDetail)
       </el-descriptions>
 
       <div class="actions">
-        <el-button type="primary" @click="handleClaim">我要认领</el-button>
+        <el-button type="primary" @click="openClaim">我要认领</el-button>
       </div>
     </el-card>
 
     <el-empty v-else-if="!loading" description="没有找到这条信息" />
+
+    <el-dialog v-model="claimVisible" title="申请认领" width="440px">
+      <el-form label-width="80px">
+        <el-form-item label="物品">
+          <span>{{ detail?.title }}</span>
+        </el-form-item>
+
+        <el-form-item label="联系方式" required>
+          <el-input v-model="claimForm.contact" placeholder="手机号 / 微信 / QQ" />
+        </el-form-item>
+
+        <el-form-item label="补充说明">
+          <el-input
+            v-model="claimForm.message"
+            type="textarea"
+            :rows="3"
+            placeholder="描述一下物品特征，方便管理员核对"
+          />
+        </el-form-item>
+      </el-form>
+
+      <template #footer>
+        <el-button @click="claimVisible = false">取消</el-button>
+        <el-button type="primary" :loading="claimSubmitting" @click="submitClaim">
+          提交申请
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 

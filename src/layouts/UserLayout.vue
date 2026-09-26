@@ -1,10 +1,17 @@
 <script setup lang="ts">
 import { RouterView, useRouter } from 'vue-router'
+import { useUserStore } from '@/stores/user'
 
 const router = useRouter()
+const userStore = useUserStore()
 
 const goPublish = () => {
   router.push('/publish')
+}
+
+const logout = () => {
+  userStore.logout()
+  router.push('/login')
 }
 </script>
 
@@ -15,8 +22,12 @@ const goPublish = () => {
 
       <el-menu mode="horizontal" router :default-active="$route.path" :ellipsis="false" class="menu">
         <el-menu-item index="/">首页</el-menu-item>
+        <el-menu-item index="/my-claims">我的认领</el-menu-item>
       </el-menu>
 
+      <span v-if="userStore.isLogin" class="username">{{ userStore.username }}</span>
+      <el-button v-if="userStore.isLogin" link @click="logout">退出</el-button>
+      <el-button v-else link @click="router.push('/login')">登录</el-button>
       <el-button type="primary" @click="goPublish">发布失物</el-button>
     </el-header>
 
@@ -47,5 +58,10 @@ const goPublish = () => {
 .menu {
   flex: 1;
   border-bottom: none;
+}
+
+.username {
+  font-size: 14px;
+  color: #606266;
 }
 </style>

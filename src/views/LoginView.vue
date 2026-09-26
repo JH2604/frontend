@@ -2,6 +2,7 @@
 import { reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
+import { login, register } from '@/api/auth'
 import { useUserStore } from '@/stores/user'
 
 const route = useRoute()
@@ -45,14 +46,9 @@ async function handleSubmit() {
 
   loading.value = true
   try {
-    // TODO 后端接口通了以后，把这块换成：
-    // const res = activeTab.value === 'register' ? await register(form) : await login(form)
-    await new Promise((r) => setTimeout(r, 300))
-    const res = {
-      token: 'mock-token-' + Date.now(),
-      role: (form.username === 'admin' ? 'admin' : 'user') as 'admin' | 'user',
-      username: form.username,
-    }
+    // USE_MOCK 开着的时候，api 层内部走假数据；关掉就走真后端，这一页不用改
+    const params = { username: form.username, password: form.password }
+    const res = activeTab.value === 'register' ? await register(params) : await login(params)
 
     userStore.setLogin(res)
     ElMessage.success(activeTab.value === 'register' ? '注册成功，已自动登录' : '登录成功')
@@ -60,6 +56,8 @@ async function handleSubmit() {
     // 之前在守卫里记下的 redirect，登录完送回去
     const redirect = (route.query.redirect as string) || (res.role === 'admin' ? '/admin' : '/')
     router.push(redirect)
+  } catch {
+    // 错误提示已经在 src/utils/request.ts 的响应拦截器里统一弹过了，这里不重复弹
   } finally {
     loading.value = false
   }

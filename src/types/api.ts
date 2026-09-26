@@ -38,12 +38,6 @@ export interface Item {
 
 export interface ItemQuery extends PageQuery {
   keyword?: string;
-  type?: ItemType;
-  status?: ItemStatus;
-}
-
-export interface ItemQuery extends PageQuery {
-  keyword?: string;
   categoryId?: number;
   type?: ItemType;
   status?: ItemStatus;

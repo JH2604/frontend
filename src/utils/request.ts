@@ -26,9 +26,11 @@ service.interceptors.response.use(
     if (res.code !== 0) {
       ElMessage.error(res.msg || '请求失败')
 
-      // 401 -> 登录过期，踢回登录页
-      if (res.code === 401) {
+      // 40003 -> 未登录 / token 过期，清登录态并踢回登录页
+      if (res.code === 40003) {
         localStorage.removeItem('token')
+        localStorage.removeItem('role')
+        localStorage.removeItem('username')
         window.location.href = '/login'
       }
       return Promise.reject(new Error(res.msg))

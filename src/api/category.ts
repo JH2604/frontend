@@ -12,5 +12,6 @@ export async function getCategoryList() {
     await delay(100)
     return mockCategories
   }
-  return http<Category[]>({ url: '/v1/categories', method: 'get' })
+  // 路径规则跟 /api/login 保持一致（不带 /v1）。分类接口后端还没给文档，先按这个猜
+  return http<Category[]>({ url: '/categories', method: 'get' })
 }

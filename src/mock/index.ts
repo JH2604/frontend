@@ -1,4 +1,4 @@
-import type { Item, ItemQuery, PageResult } from '@/types/api'
+import type { Item, ItemQuery, ItemStatus, PageResult } from '@/types/api'
 
 // ===== 总开关 =====
 // 后端接口通了以后，把这里改成 false，全项目就切到真实接口
@@ -7,6 +7,21 @@ export const USE_MOCK = true
 // 模拟网络延迟，让 loading 动画看得见
 export function delay(ms = 300) {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+// ===== 假登录 / 假注册 =====
+// 真后端登录只返回 { token }，这里为了方便本地开发直接给全整份，
+// 接口层（src/api/auth.ts）会把两种情况统一成同一种形状，页面不用关心差别
+export function mockLogin(data: { username: string; password: string }) {
+  return {
+    token: `mock-token-${Date.now()}`,
+    role: (data.username === 'admin' ? 'admin' : 'user') as 'user' | 'admin',
+    username: data.username,
+  }
+}
+
+export function mockRegister(data: { username: string; password: string }) {
+  return mockLogin(data)
 }
 
 // ===== 假数据 =====
@@ -144,4 +159,19 @@ export function mockCreateItem(data: Partial<Item>): Item {
   }
   mockItems = [item, ...mockItems]
   return item
+}
+
+// 审核：改状态（管理员"通过"传 published，"驳回"传 rejected，"关闭"传 closed）
+export function mockUpdateItemStatus(id: number, status: ItemStatus): Item {
+  const found = mockItems.find((it) => it.id === id)
+  if (!found) throw new Error('物品不存在')
+
+  // found 是数组里那个对象本身，改它就是改原数据
+  found.status = status
+  return found
+}
+
+// 删除：把这条从数组里过滤掉
+export function mockDeleteItem(id: number): void {
+  mockItems = mockItems.filter((it) => it.id !== id)
 }

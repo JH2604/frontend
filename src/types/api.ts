@@ -41,3 +41,10 @@ export interface ItemQuery extends PageQuery {
   type?: ItemType;
   status?: ItemStatus;
 }
+
+export interface ItemQuery extends PageQuery {
+  keyword?: string;
+  categoryId?: number;
+  type?: ItemType;
+  status?: ItemStatus;
+}

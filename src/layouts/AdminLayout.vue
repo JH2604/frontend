@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { RouterView, useRouter } from 'vue-router'
+import { useUserStore } from '@/stores/user'
 
 const router = useRouter()
+const userStore = useUserStore()
 
 const menus = [
   { path: '/admin/audit', title: '发布审核' },
@@ -9,11 +11,11 @@ const menus = [
 ]
 
 const logout = () => {
-  localStorage.removeItem('token')
-  localStorage.removeItem('role')
+  userStore.logout()
   router.push('/login')
 }
 </script>
+
 
 <template>
   <el-container class="layout">

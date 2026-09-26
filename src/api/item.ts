@@ -1,18 +1,39 @@
 import { http } from '@/utils/request'
 import type { Item, ItemQuery, PageResult } from '@/types/api'
+import { USE_MOCK, delay, mockGetItemList, mockGetItemDetail, mockCreateItem } from '@/mock'
 
-// 列表（带分页和搜索）
-export const getItemList = (params: ItemQuery) =>
-  http<PageResult<Item>>({ url: '/v1/items', method: 'get', params })
+// 列表（带分页、搜索、分类筛选）
+export async function getItemList(params: ItemQuery) {
+  if (USE_MOCK) {
+    await delay()
+    return mockGetItemList(params)
+  }
+  return http<PageResult<Item>>({ url: '/v1/items', method: 'get', params })
+}
 
 // 详情
-export const getItemDetail = (id: number) =>
-  http<Item>({ url: `/v1/items/${id}`, method: 'get' })
+export async function getItemDetail(id: number) {
+  if (USE_MOCK) {
+    await delay()
+    return mockGetItemDetail(id)
+  }
+  return http<Item>({ url: `/v1/items/${id}`, method: 'get' })
+}
 
 // 发布
-export const createItem = (data: Partial<Item>) =>
-  http<Item>({ url: '/v1/items', method: 'post', data })
+export async function createItem(data: Partial<Item>) {
+  if (USE_MOCK) {
+    await delay(400)
+    return mockCreateItem(data)
+  }
+  return http<Item>({ url: '/v1/items', method: 'post', data })
+}
 
 // 删除
-export const deleteItem = (id: number) =>
-  http<void>({ url: `/v1/items/${id}`, method: 'delete' })
+export async function deleteItem(id: number) {
+  if (USE_MOCK) {
+    await delay(200)
+    return
+  }
+  return http<void>({ url: `/v1/items/${id}`, method: 'delete' })
+}

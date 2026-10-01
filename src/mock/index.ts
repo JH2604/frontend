@@ -18,17 +18,29 @@ export function delay(ms = 300) {
 }
 
 // ===== 假登录 / 假注册 =====
-// 真后端登录只返回 { token }，这里为了方便本地开发直接给全整份，
-// 接口层（src/api/auth.ts）会把两种情况统一成同一种形状，页面不用关心差别
-export function mockLogin(data: { username: string; password: string }) {
+// 契约（文档 A1/A2）：
+//   入参 { student_id, password }（注册时还要 role）
+//   出参 { access_token, refresh_token, user: { name, role, ... } }
+// 这里模拟成"名字来自实名库"的效果：你输学号，界面上显示的是后端查出来的名字。
+// 想用管理员身份，注册时选"管理员"，或者学号直接填 admin。
+export type MockLoginParams = {
+  studentId: string
+  password: string
+  role?: 'student' | 'admin'
+}
+
+export function mockLogin(data: MockLoginParams) {
+  const isAdmin = data.role === 'admin' || data.studentId === 'admin'
   return {
     token: `mock-token-${Date.now()}`,
-    role: (data.username === 'admin' ? 'admin' : 'user') as 'user' | 'admin',
-    username: data.username,
+    refreshToken: `mock-refresh-${Date.now()}`,
+    role: (isAdmin ? 'admin' : 'student') as 'student' | 'admin',
+    // 注意这里展示的是"后端查出来的实名"，不是用户敲的学号
+    username: isAdmin ? '管理员' : data.studentId,
   }
 }
 
-export function mockRegister(data: { username: string; password: string }) {
+export function mockRegister(data: MockLoginParams) {
   return mockLogin(data)
 }
 

@@ -6,6 +6,7 @@ import type { Item } from '@/types/api'
 import { getItemDetail } from '@/api/item'
 import { createClaim } from '@/api/claim'
 import StatusTag from '@/components/StatusTag.vue'
+import { formatDateTime, fromNow } from '@/utils/format'
 
 const route = useRoute()
 const router = useRouter()
@@ -80,8 +81,12 @@ onMounted(fetchDetail)
 
       <el-descriptions :column="2" border>
         <el-descriptions-item label="地点">{{ detail.place }}</el-descriptions-item>
-        <el-descriptions-item label="发生时间">{{ detail.happenTime }}</el-descriptions-item>
-        <el-descriptions-item label="发布时间">{{ detail.createdAt }}</el-descriptions-item>
+        <el-descriptions-item label="发生时间">
+          <span :title="formatDateTime(detail.happenTime)">{{ fromNow(detail.happenTime) }}</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="发布时间">
+          <span :title="formatDateTime(detail.createdAt)">{{ fromNow(detail.createdAt) }}</span>
+        </el-descriptions-item>
         <el-descriptions-item label="编号">{{ detail.id }}</el-descriptions-item>
         <el-descriptions-item label="描述" :span="2">
           {{ detail.description }}

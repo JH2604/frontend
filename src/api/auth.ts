@@ -1,24 +1,51 @@
 import { http } from '@/utils/request'
 import { USE_MOCK, delay, mockLogin, mockRegister } from '@/mock'
+import {
+  ACCESS_TOKEN_FIELDS,
+  API_LOGIN_PATH,
+  API_LOGOUT_PATH,
+  API_ME_PATH,
+  API_REGISTER_PATH,
+  LOGIN_ID_FIELD,
+  LOGIN_USER_KEY,
+  REFRESH_TOKEN_FIELDS,
+  Role,
+  USER_NAME_FIELDS,
+  pickTokenFields,
+  readRole,
+  type RoleValue,
+} from '@/utils/contract'
 
+/**
+ * 登录 / 注册的入参（文档 A1 / A2）。
+ *
+ * 注意字段名叫 studentId 而不是 student_id：
+ * 前端内部一律用驼峰，发给后端时再按 LOGIN_ID_FIELD 转成下划线。
+ * 转换只在这一个文件里发生，页面不用管。
+ */
 export interface LoginParams {
-  username: string
+  studentId: string
   password: string
+  /** 只有注册用得上（文档 A1 里 role 是必填）。不传默认按学生注册 */
+  role?: RoleValue
 }
 
 export interface LoginResult {
   token: string
-  role: 'user' | 'admin'
+  /** 刷新令牌，只用于调用 A4，绝不放进任何请求头 */
+  refreshToken?: string
+  role: RoleValue
   username: string
 }
 
-// 后端登录只返回 { token }，但 token 里带了 user_id 和 role。
+// 后端登录只返回令牌，access_token 里带了 user_id 和 role。
 // JWT 就是三段用 . 拼起来的字符串：头部.载荷.签名，中间那段是 base64 编码的 JSON。
-// 这里把它解出来 —— 这是问后端要 role 之外的另一条路（不用后端改代码）。
-function readTokenPayload(token: string): { role: 'user' | 'admin'; userId?: number } {
+// 现在文档 A2 会额外返回一个 user 对象（有姓名和角色），
+// 所以我们优先用那个；解 JWT 只作为"后端还没改完"时的兜底。
+function readTokenPayload(token: string): { role: RoleValue; userId?: number } {
   try {
     const part = token.split('.')[1]
-    if (!part) return { role: 'user' }
+    if (!part) return { role: Role.STUDENT }
 
     // base64url 用的是 - 和 _，标准 base64 用的是 + 和 /，先换回来
     const base64 = part.replace(/-/g, '+').replace(/_/g, '/')
@@ -33,33 +60,62 @@ function readTokenPayload(token: string): { role: 'user' | 'admin'; userId?: num
     }
 
     return {
-      role: payload.role === 'admin' ? 'admin' : 'user',
+      role: payload.role === Role.ADMIN ? Role.ADMIN : Role.STUDENT,
       userId: payload.user_id ?? payload.userId,
     }
   } catch {
-    // token 不是标准 JWT 时按普通用户处理，别让页面直接崩
-    return { role: 'user' }
+    // token 不是标准 JWT 时按普通学生处理，别让页面直接崩
+    return { role: Role.STUDENT }
   }
 }
 
-// 登录
+/**
+ * 从登录响应里取出后端给的 user 对象（文档 A2）。
+ * 取不到就返回空对象，由调用方兜底。
+ */
+function pickLoginUser(res: Record<string, unknown> | undefined | null): {
+  role?: RoleValue
+  name?: string
+} {
+  const user = res?.[LOGIN_USER_KEY]
+  return {
+    role: readRole(user),
+    // pickTokenFields 是个通用的"按候选名单取第一个非空字符串"，
+    // 名字里带 token 只是因为它一开始是为令牌写的，取姓名一样能用
+    name: pickTokenFields(user, USER_NAME_FIELDS),
+  }
+}
+
+// 登录（文档 A2）
 export async function login(data: LoginParams): Promise<LoginResult> {
   if (USE_MOCK) {
     await delay()
     return mockLogin(data)
   }
 
-  const res = await http<{ token: string }>({ url: '/login', method: 'post', data })
+  // 请求体：{ student_id, password }
+  const res = await http<Record<string, unknown>>({
+    url: API_LOGIN_PATH,
+    method: 'post',
+    // 用 [LOGIN_ID_FIELD] 而不是写死 student_id：
+    // 将来字段名要改，只改 contract.ts 里那一个常量
+    data: { [LOGIN_ID_FIELD]: data.studentId, password: data.password },
+  })
 
-  // token 存下来；role 从 token 里解；username 就是用户刚敲的那个
+  const token = pickTokenFields(res, ACCESS_TOKEN_FIELDS) ?? ''
+  const user = pickLoginUser(res)
+
   return {
-    token: res.token,
-    role: readTokenPayload(res.token).role,
-    username: data.username,
+    token,
+    refreshToken: pickTokenFields(res, REFRESH_TOKEN_FIELDS),
+    // 优先用后端给的 role；后端没给才去解 JWT
+    role: user.role ?? readTokenPayload(token).role,
+    // 优先用实名（后端从实名库查出来的），没有才退回用户输入的学号
+    username: user.name ?? data.studentId,
   }
 }
 
-// 注册：文档里注册只返回用户名（data 是个字符串），不给 token，
+// 注册（文档 A1）：文档里注册不返回令牌，只返回用户信息，
 // 所以注册成功后必须再调一次登录，才能拿到 token
 export async function register(data: LoginParams): Promise<LoginResult> {
   if (USE_MOCK) {
@@ -67,11 +123,30 @@ export async function register(data: LoginParams): Promise<LoginResult> {
     return mockRegister(data)
   }
 
-  await http<string>({ url: '/register', method: 'post', data })
+  await http<{ id: number; student_id: string; name: string; role: string }>({
+    url: API_REGISTER_PATH,
+    method: 'post',
+    data: {
+      [LOGIN_ID_FIELD]: data.studentId,
+      password: data.password,
+      role: data.role ?? Role.STUDENT,
+    },
+  })
   return login(data)
 }
 
-// 当前登录用户：可以用来检查 token 还有没有效
+// 退出登录（文档 A3）：让后端把这个会话吊销掉
+//
+// 为什么必须调？因为 access_token 在 2 小时内本来还有效。
+// 如果只在本地删掉令牌，那个令牌在后端看来还是"活的"，
+// 万一之前被人抓包拿到，他还能继续用。调了 A3，后端才会把它标记成已吊销。
+export function logoutApi() {
+  // silent: true —— 退出登录失败时不弹错误提示。
+  // 因为不管后端成不成功，本地都必须退干净，弹个红字只会让用户困惑。
+  return http<null>({ url: API_LOGOUT_PATH, method: 'post', silent: true })
+}
+
+// 当前登录用户（文档 U1）：可以用来检查 token 还有没有效
 export function getMe() {
-  return http<{ user_id: number }>({ url: '/me', method: 'get' })
+  return http<Record<string, unknown>>({ url: API_ME_PATH, method: 'get' })
 }

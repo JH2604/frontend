@@ -6,6 +6,7 @@ import type { TableColumn } from '@/types/table'
 import { getItemList, updateItemStatus } from '@/api/item'
 import PageTable from '@/components/PageTable.vue'
 import StatusTag from '@/components/StatusTag.vue'
+import { formatDateTime, fromNow } from '@/utils/format'
 
 const loading = ref(false)
 const total = ref(0)
@@ -22,7 +23,7 @@ const columns: TableColumn[] = [
   { prop: 'title', label: '标题', minWidth: 180 },
   { label: '类型', width: 100, slot: 'type' },
   { prop: 'place', label: '地点', width: 150 },
-  { prop: 'createdAt', label: '提交时间', width: 180 },
+  { label: '提交时间', width: 180, slot: 'createdAt' },
   { label: '状态', width: 100, slot: 'status' },
   { label: '操作', width: 170, slot: 'action' },
 ]
@@ -74,6 +75,10 @@ onMounted(fetchList)
       :loading="loading"
       @search="fetchList"
     >
+      <template #createdAt="{ row }">
+        <span :title="formatDateTime(row.createdAt)">{{ fromNow(row.createdAt) }}</span>
+      </template>
+
       <template #type="{ row }">
         <el-tag :type="row.type === 'lost' ? 'danger' : 'success'">
           {{ row.type === 'lost' ? '失物' : '招领' }}

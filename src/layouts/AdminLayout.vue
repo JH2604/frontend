@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { RouterView, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
+import { logoutApi } from '@/api/auth'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -11,7 +12,8 @@ const menus = [
   { path: '/admin/items', title: '物品管理' },
 ]
 
-const logout = () => {
+const logout = async () => {
+  await logoutApi().catch(() => undefined)
   userStore.logout()
   router.push('/login')
 }

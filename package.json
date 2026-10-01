@@ -1,5 +1,6 @@
 {
-  "name": "frontend",
+  "name": "lost-found-frontend",
+  "description": "校园失物招领系统 · 前端（Vue 3 + Element Plus + TypeScript）",
   "version": "0.0.0",
   "private": true,
   "type": "module",

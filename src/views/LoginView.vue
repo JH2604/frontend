@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { login, register } from '@/api/auth'
 import { useUserStore } from '@/stores/user'
+import { Role, type RoleValue } from '@/utils/contract'
 
 const route = useRoute()
 const router = useRouter()
@@ -15,16 +16,19 @@ const formRef = ref<FormInstance>()
 const loading = ref(false)
 
 const form = reactive({
-  username: '',
+  // 契约（文档 A1/A2）里登录凭证是学号，不是用户名
+  studentId: '',
   password: '',
   confirmPassword: '',
+  // 只有注册时用得上。不选就按学生注册
+  role: Role.STUDENT as RoleValue,
 })
 
 const rules: FormRules = {
-  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
+  studentId: [{ required: true, message: '请输入学号', trigger: 'blur' }],
   password: [
     { required: true, message: '请输入密码', trigger: 'blur' },
-    { min: 6, message: '密码至少 6 位', trigger: 'blur' },
+    { min: 8, message: '密码至少 8 位', trigger: 'blur' },
   ],
 }
 
@@ -47,7 +51,11 @@ async function handleSubmit() {
   loading.value = true
   try {
     // USE_MOCK 开着的时候，api 层内部走假数据；关掉就走真后端，这一页不用改
-    const params = { username: form.username, password: form.password }
+    const params = {
+      studentId: form.studentId,
+      password: form.password,
+      role: form.role,
+    }
     const res = activeTab.value === 'register' ? await register(params) : await login(params)
 
     userStore.setLogin(res)
@@ -75,18 +83,27 @@ async function handleSubmit() {
       </el-tabs>
 
       <el-form ref="formRef" :model="form" :rules="rules" @submit.prevent="handleSubmit">
-        <el-form-item prop="username">
-          <el-input v-model="form.username" placeholder="用户名" clearable />
+        <el-form-item prop="studentId">
+          <el-input v-model="form.studentId" placeholder="学号" clearable />
         </el-form-item>
 
         <el-form-item prop="password">
           <el-input
             v-model="form.password"
             type="password"
-            placeholder="密码（至少 6 位）"
+            placeholder="密码（8~32 位，含字母和数字）"
             show-password
             @keyup.enter="handleSubmit"
           />
+        </el-form-item>
+
+        <!-- 注册时才选身份（文档 A1 里 role 是必填）。
+             注：文档也提醒后端这里必须加白名单，否则谁都能注册成管理员 -->
+        <el-form-item v-if="activeTab === 'register'" prop="role">
+          <el-radio-group v-model="form.role">
+            <el-radio :value="Role.STUDENT">学生</el-radio>
+            <el-radio :value="Role.ADMIN">管理员</el-radio>
+          </el-radio-group>
         </el-form-item>
 
         <el-form-item v-if="activeTab === 'register'" prop="confirmPassword">
@@ -105,10 +122,6 @@ async function handleSubmit() {
           </el-button>
         </el-form-item>
       </el-form>
-
-      <p class="tip">
-        现在是 Mock：登录时用户名填 admin 会以管理员身份进入管理端，其他用户名进用户端。注册会直接自动登录。
-      </p>
     </el-card>
   </div>
 </template>
@@ -135,10 +148,4 @@ async function handleSubmit() {
   width: 100%;
 }
 
-.tip {
-  margin: 0;
-  font-size: 12px;
-  color: #909399;
-  line-height: 1.6;
-}
 </style>

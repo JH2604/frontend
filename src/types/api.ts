@@ -1,11 +1,22 @@
 // ===== 后端统一返回体!!!注意统一=====
+// 提示字段现在有两个名字在打架：
+//   - 接口文档 1.4 写的是 message
+//   - 群里 10/1 15:37 拍板"就 msg 哈"
+// 所以两个都留着可选，真正的取值逻辑在 src/utils/contract.ts 的 pickMessage()。
+// TODO[Apifox]：确认后把多余的那个删掉
 export interface ApiResult<T = unknown> {
   code: number;
-  msg: string;
+  /** 接口文档 1.4 的字段名 */
+  message?: string;
+  /** 群里 10/1 拍板的字段名 */
+  msg?: string;
   data: T;
 }
 
 // ===== 统一分页 =====
+// 前端内部统一用 pageSize（驼峰）。
+// 后端文档 1.5 用的是 page_size（下划线），所以 api 层会用
+// contract.ts 里的 normalizePageResult() 转一道，两种都能吃。
 export interface PageQuery {
   page: number;
   pageSize: number;

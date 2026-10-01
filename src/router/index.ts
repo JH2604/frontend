@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import UserLayout from '@/layouts/UserLayout.vue'
 import AdminLayout from '@/layouts/AdminLayout.vue'
+import { ROUTE_LOGIN, STORAGE_KEYS } from '@/utils/contract'
 
 const router = createRouter({
   // 注意：保留 import.meta.env.BASE_URL，这是部署时的路径前缀
@@ -51,12 +52,14 @@ const router = createRouter({
 
 // 路由守卫：进页面前先查有没有登录、角色对不对
 router.beforeEach((to) => {
-  const token = localStorage.getItem('token')
-  const role = localStorage.getItem('role')
+  // key 名和 stores/user.ts、utils/request.ts 保持同一份来源，
+  // 三处只要有一处对不上，就会出现"登录了但进不去"的怪现象
+  const token = localStorage.getItem(STORAGE_KEYS.token)
+  const role = localStorage.getItem(STORAGE_KEYS.role)
 
   // 需要登录但没登录 -> 去登录页，并记住原本想去哪
   if (to.meta.requireAuth && !token) {
-    return { path: '/login', query: { redirect: to.fullPath } }
+    return { path: ROUTE_LOGIN, query: { redirect: to.fullPath } }
   }
 
   // 需要特定角色但角色不对 -> 踢回首页

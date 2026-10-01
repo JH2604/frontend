@@ -13,3 +13,36 @@ body,
 body {
   font-family: -apple-system, 'Segoe UI', 'Microsoft YaHei', sans-serif;
 }
+
+/* ===== 设计令牌（design token）=====
+   配色直接取自组长给的手机原型（index.html 第 7-18 行的 CSS 变量），
+   这样 web 端和产品给的手机端是同一套视觉语言。
+   用 CSS 变量的好处：改一处，全站生效。 */
+:root {
+  --color-bg: #f4f5f7;
+  --color-card: #ffffff;
+  --color-text: #1f2329;
+  --color-sub: #8a919f;
+  --color-line: #e8eaed;
+  --color-primary: #3370ff;
+  --color-lost: #f54a45;
+  --color-found: #00b578;
+  --radius-card: 12px;
+}
+
+/* 把上面的配色注入 Element Plus 的主题系统。
+   只改这几个变量，全站所有按钮/链接/选中态/标签的颜色就统一了，
+   不需要去覆盖组件的具体样式类。 */
+:root {
+  --el-color-primary: var(--color-primary);
+  --el-color-danger: var(--color-lost);
+  --el-color-success: var(--color-found);
+  --el-border-radius-base: 8px;
+  --el-text-color-primary: var(--color-text);
+  --el-text-color-regular: var(--color-sub);
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+}

@@ -9,6 +9,7 @@ import { deleteItem, getItemList, updateItemStatus } from '@/api/item'
 import { getCategoryList } from '@/api/category'
 import PageTable from '@/components/PageTable.vue'
 import StatusTag from '@/components/StatusTag.vue'
+import { formatDateTime, fromNow } from '@/utils/format'
 
 const router = useRouter()
 
@@ -38,7 +39,7 @@ const columns: TableColumn[] = [
   { prop: 'title', label: '标题', minWidth: 180 },
   { label: '类型', width: 90, slot: 'type' },
   { prop: 'place', label: '地点', width: 140 },
-  { prop: 'createdAt', label: '提交时间', width: 175 },
+  { label: '提交时间', width: 175, slot: 'createdAt' },
   { label: '状态', width: 100, slot: 'status' },
   { label: '操作', width: 230, slot: 'action' },
 ]
@@ -155,6 +156,10 @@ onMounted(() => {
         <el-form-item>
           <el-button type="primary" @click="handleSearch">搜索</el-button>
         </el-form-item>
+      </template>
+
+      <template #createdAt="{ row }">
+        <span :title="formatDateTime(row.createdAt)">{{ fromNow(row.createdAt) }}</span>
       </template>
 
       <template #type="{ row }">

@@ -5,6 +5,7 @@ import type { Claim, ClaimStatus } from '@/types/api'
 import type { TableColumn } from '@/types/table'
 import { getMyClaims } from '@/api/claim'
 import PageTable from '@/components/PageTable.vue'
+import { formatDateTime, fromNow } from '@/utils/format'
 
 const router = useRouter()
 
@@ -35,7 +36,7 @@ const columns: TableColumn[] = [
   { prop: 'itemTitle', label: '物品', minWidth: 160 },
   { prop: 'contact', label: '联系方式', width: 140 },
   { prop: 'message', label: '说明', minWidth: 180 },
-  { prop: 'createdAt', label: '提交时间', width: 175 },
+  { label: '提交时间', width: 175, slot: 'createdAt' },
   { label: '状态', width: 100, slot: 'status' },
   { label: '操作', width: 100, slot: 'action' },
 ]
@@ -84,6 +85,10 @@ onMounted(fetchList)
             <el-option v-for="s in statusOptions" :key="s.value" :label="s.label" :value="s.value" />
           </el-select>
         </el-form-item>
+      </template>
+
+      <template #createdAt="{ row }">
+        <span :title="formatDateTime(row.createdAt)">{{ fromNow(row.createdAt) }}</span>
       </template>
 
       <template #status="{ row }">

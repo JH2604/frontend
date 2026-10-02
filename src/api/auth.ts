@@ -13,6 +13,7 @@ import {
   USER_NAME_FIELDS,
   pickTokenFields,
   readRole,
+  readUserId,
   type RoleValue,
 } from '@/utils/contract'
 
@@ -36,6 +37,16 @@ export interface LoginResult {
   refreshToken?: string
   role: RoleValue
   username: string
+  /**
+   * 当前用户的数字 id（契约 A2 里 user.id）。
+   *
+   * 为什么登录就要把它带上？
+   *   评论的"能不能删"必须知道"我是谁"（文档 C3：本人能删自己的评论）。
+   *   如果不在这里传出来，页面就只能靠姓名比对 —— 重名就判断错了，
+   *   而权限判断绝对不能靠姓名。
+   * 取不到时是 0，表示"不知道我是谁"，页面按保守处理（不给删）。
+   */
+  userId: number
 }
 
 // 后端登录只返回令牌，access_token 里带了 user_id 和 role。
@@ -76,6 +87,7 @@ function readTokenPayload(token: string): { role: RoleValue; userId?: number } {
 function pickLoginUser(res: Record<string, unknown> | undefined | null): {
   role?: RoleValue
   name?: string
+  userId: number
 } {
   const user = res?.[LOGIN_USER_KEY]
   return {
@@ -83,6 +95,8 @@ function pickLoginUser(res: Record<string, unknown> | undefined | null): {
     // pickTokenFields 是个通用的"按候选名单取第一个非空字符串"，
     // 名字里带 token 只是因为它一开始是为令牌写的，取姓名一样能用
     name: pickTokenFields(user, USER_NAME_FIELDS),
+    // id 是数字，所以用专门的 readUserId（见 contract.ts 第 10 节）
+    userId: readUserId(user),
   }
 }
 
@@ -112,6 +126,8 @@ export async function login(data: LoginParams): Promise<LoginResult> {
     role: user.role ?? readTokenPayload(token).role,
     // 优先用实名（后端从实名库查出来的），没有才退回用户输入的学号
     username: user.name ?? data.studentId,
+    // 后端 user 对象里有 id 就用；没有就退回解 JWT 拿到的 user_id，再没有就是 0
+    userId: user.userId || readTokenPayload(token).userId || 0,
   }
 }
 

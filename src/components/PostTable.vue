@@ -33,7 +33,6 @@ const query = reactive({
   keyword: '',
   type: 'all' as ItemType | 'all',
   status: 'all' as ItemStatus | 'all',
-  sortBy: 'created_at' as 'created_at' | 'comment_count',
 })
 
 const typeOptions: { label: string; value: ItemType | 'all' }[] = [
@@ -42,16 +41,25 @@ const typeOptions: { label: string; value: ItemType | 'all' }[] = [
   { label: '招领', value: 'found' },
 ]
 
+// v1.1 把状态文案写清楚了（第 1.7 节）：失物帖说"未找到 / 已找到"，
+// 招领帖说"待认领 / 已认领"。这里是"全部状态"筛选，
+// 所以只用两边都说得通的"进行中 / 已完结"。
 const statusOptions: { label: string; value: ItemStatus | 'all' }[] = [
   { label: '全部状态', value: 'all' },
   { label: '进行中', value: 'open' },
-  { label: '已完成', value: 'closed' },
+  { label: '已完结', value: 'closed' },
 ]
 
-const sortOptions: { label: string; value: 'created_at' | 'comment_count' }[] = [
-  { label: '最新发布', value: 'created_at' },
-  { label: '最多评论', value: 'comment_count' },
-]
+// ⚠️ 这里原来有一个"排序"下拉框（最新发布 / 最多评论），v1.1 之后【删掉了】。
+//
+// 为什么必须删？因为 P1 的 `sort_by` 参数在 v1.1 里被整个移除：
+//   v1.0：sort_by = created_at | comment_count
+//   v1.1：（没有这个参数了），只保留 order = asc | desc
+// 而 comment_count 字段本身也随评论模块一起被删了。
+//
+// 如果留着这个下拉框：用户选了"最多评论"，请求里带上 sort_by=comment_count，
+// 后端要么忽略（用户觉得"选了没反应"），要么报 40000。
+// 按交接说明第 9 节第 6 条：知道后端一定会忽略/拒绝的操作，前端不要给入口。
 
 // 一份列描述，PageTable 照着画表格。
 // 列只列契约 P1 真的会返回的字段，不要写 happenTime / category 这些不存在的。
@@ -73,7 +81,6 @@ async function fetchList() {
       keyword: query.keyword,
       type: query.type,
       status: query.status,
-      sortBy: query.sortBy,
       order: 'desc',
       // mine 为 true 时后端只返回"我发布的"（文档 P1 的 mine 参数）
       mine: props.mine,
@@ -99,7 +106,6 @@ function handleReset() {
   query.keyword = ''
   query.type = 'all'
   query.status = 'all'
-  query.sortBy = 'created_at'
   handleSearch()
 }
 
@@ -148,12 +154,6 @@ onActivated(() => {
       <el-form-item label="状态">
         <el-select v-model="query.status" style="width: 130px" @change="handleSearch">
           <el-option v-for="o in statusOptions" :key="o.value" :label="o.label" :value="o.value" />
-        </el-select>
-      </el-form-item>
-
-      <el-form-item label="排序">
-        <el-select v-model="query.sortBy" style="width: 130px" @change="handleSearch">
-          <el-option v-for="o in sortOptions" :key="o.value" :label="o.label" :value="o.value" />
         </el-select>
       </el-form-item>
 

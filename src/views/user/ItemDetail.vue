@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import type { Item } from '@/types/api'
+import type { Item, ItemStatus } from '@/types/api'
 import { deleteItem, getItemDetail, updateItemStatus } from '@/api/item'
 import StatusTag from '@/components/StatusTag.vue'
-import { ROUTE_HOME } from '@/utils/contract'
+import { ROUTE_HOME, STATUS_TEXT } from '@/utils/contract'
 import { formatDateTime, fromNow } from '@/utils/format'
 
 const route = useRoute()
@@ -13,6 +13,32 @@ const router = useRouter()
 
 const loading = ref(false)
 const detail = ref<Item | null>(null)
+
+/**
+ * 当前状态下"这个按钮按下去会变成什么"。
+ *
+ * v1.1 明确写了状态是**双向**的：
+ *   closed → 标记已找到 / 已认领
+ *   open   → 撤回为进行中（比如误点）
+ * 所以不用布尔值，直接存目标状态。
+ *
+ * C++ 类比：用 `enum class Status` 而不是 `bool closed` ——
+ * 布尔值表达不了"两个方向"，加一个方向就得重构。
+ */
+const targetStatus = computed<ItemStatus>(() => (detail.value?.status === 'open' ? 'closed' : 'open'))
+
+/**
+ * 按钮上的文案，随"帖子类型 + 目标状态"变。
+ *
+ * 文案来自 contract.ts 的 STATUS_TEXT（v1.1 第 1.7 节规定的说法）：
+ *   locked/open  失物=未找到，招领=待认领
+ *   closed       失物=已找到，招领=已认领
+ */
+const actionText = computed(() => {
+  if (!detail.value) return ''
+  const { type } = detail.value
+  return STATUS_TEXT[type][targetStatus.value]
+})
 
 async function fetchDetail() {
   loading.value = true
@@ -29,11 +55,23 @@ async function fetchDetail() {
   }
 }
 
-// 标记已找回 / 已认领（文档 P5）。
-// 契约里写明【只有发帖人本人】能改，所以按钮上带了 isMine 判断。
-async function handleClose() {
+/**
+ * 改状态（文档 P5）。
+ *
+ * 两处按 v1.1 改过：
+ *   1. 判断条件从 isMine 改成 canChangeStatus。
+ *      契约第 7 章权限表："修改他人帖子的状态 → 管理员也 ✗"，
+ *      所以 canChangeStatus 目前等价于 isMine；但用后端给的这个字段更稳
+ *      （万一以后放开"管理员也能改"，用 isMine 就漏了）。
+ *   2. 改完必须重新拉一次详情。
+ *      因为 v1.1 的 P5 **只返回** { id, status, closed_at }，
+ *      不再返回完整帖子。想更新页面上的状态标签/按钮文案，
+ *      就得再调一次 P2。以前的代码也是这么做的，这里保持不变。
+ */
+async function handleToggleStatus() {
   if (!detail.value) return
-  const text = detail.value.type === 'found' ? '已认领' : '已找回'
+  const target = targetStatus.value
+  const text = actionText.value
 
   try {
     await ElMessageBox.confirm(`确定把「${detail.value.title}」标记为${text}吗？`, '确认', {
@@ -46,10 +84,14 @@ async function handleClose() {
     return
   }
 
-  await updateItemStatus(detail.value.id, 'closed')
-  ElMessage.success(`已标记为${text}`)
-  // 改完重新拉一次详情，页面上的状态标签才会跟着变
-  fetchDetail()
+  try {
+    await updateItemStatus(detail.value.id, target)
+    ElMessage.success(`已标记为${text}`)
+    // P5 只返回三个字段，所以必须重新拉详情（见上面第 2 点的说明）
+    fetchDetail()
+  } catch {
+    // 错误提示已经在 utils/request.ts 的拦截器里统一弹过了
+  }
 }
 
 // 删除（文档 P4，本人或管理员）。
@@ -105,7 +147,15 @@ onMounted(fetchDetail)
 
         <el-descriptions-item label="发布人">{{ detail.author.name }}</el-descriptions-item>
         <el-descriptions-item label="编号">{{ detail.id }}</el-descriptions-item>
-        <el-descriptions-item label="评论数">{{ detail.commentCount }}</el-descriptions-item>
+
+        <!-- 已完结时显示"什么时候完结的"（v1.1 新增的 closed_at）。
+             进行中是 null，就显示一个短横，不留空白。 -->
+        <el-descriptions-item label="完结时间">
+          <span v-if="detail.closedAt" :title="formatDateTime(detail.closedAt)">
+            {{ fromNow(detail.closedAt) }}
+          </span>
+          <span v-else>—</span>
+        </el-descriptions-item>
 
         <el-descriptions-item label="描述" :span="2">
           <div class="content">{{ detail.content }}</div>
@@ -125,12 +175,17 @@ onMounted(fetchDetail)
       </div>
 
       <div class="actions">
+        <!-- 改状态按钮（P5）。
+             判断用后端给的 canChangeStatus，不用 isMine（原因见 script 里的注释）。
+             文案随"帖子类型 + 目标状态"变：
+               进行中 → 「标记为已找到」/「标记为已认领」
+               已完结 → 「撤回为进行中」 -->
         <el-button
-          v-if="detail.isMine && detail.status === 'open'"
-          type="primary"
-          @click="handleClose"
+          v-if="detail.canChangeStatus"
+          :type="detail.status === 'open' ? 'primary' : 'default'"
+          @click="handleToggleStatus"
         >
-          标记为{{ detail.type === 'found' ? '已认领' : '已找回' }}
+          {{ detail.status === 'open' ? `标记为${actionText}` : '撤回为进行中' }}
         </el-button>
         <el-button v-if="detail.canDelete" type="danger" plain @click="handleDelete">
           删除

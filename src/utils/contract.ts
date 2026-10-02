@@ -172,6 +172,14 @@ export const STORAGE_KEYS = {
   role: 'role',
   /** 界面上显示的用户名 */
   username: 'username',
+  /**
+   * 当前登录用户的数字 id（登录响应 A2 里 user.id）。
+   *
+   * 为什么一定要存它？
+   *   评论的"能不能删"要靠它判断（契约 C3：本人能删自己的、管理员能删所有）。
+   *   光有姓名不行 —— 重名是存在的；光有令牌也不行 —— 令牌里的 id 不一定解得出。
+   */
+  userId: 'user_id',
 } as const
 
 // ────────────────────────────────────────────────
@@ -259,6 +267,32 @@ export function pickTokenFields(
 export const LOGIN_USER_KEY = 'user'
 export const USER_NAME_FIELDS = ['name', 'username', 'nickname'] as const
 
+/**
+ * 用户对象里"数字 id"的候选字段名。
+ * 契约 A2 写的是 user.id，这里多留一个 user_id 兜底（后端偶尔两种写法混用）。
+ *
+ * 和上面按"非空字符串"取的函数不同，id 是【数字】，
+ * 所以单独写一个函数，顺便做一次 Number() 转换：
+ * 后端有可能把 int64 序列化成字符串再发过来（JS 的安全整数只有 2^53，
+ * 后端为了保险常这么干）。这跟 C++ 里 long long 不能塞进 int 是同一个顾虑。
+ */
+export const USER_ID_FIELDS = ['id', 'user_id'] as const
+
+/** 从用户对象里取出数字 id；取不到或不是数字返回 0（0 表示"未知用户"） */
+export function readUserId(input: unknown): number {
+  if (!input || typeof input !== 'object') return 0
+  const obj = input as Record<string, unknown>
+  for (const key of USER_ID_FIELDS) {
+    const value = obj[key]
+    if (typeof value === 'number' && Number.isFinite(value)) return value
+    if (typeof value === 'string' && value.trim()) {
+      const parsed = Number(value)
+      if (Number.isFinite(parsed)) return parsed
+    }
+  }
+  return 0
+}
+
 /** 角色的合法取值（文档 1.7 枚举）：student 学生 / admin 管理员 */
 export const Role = {
   STUDENT: 'student',
@@ -305,11 +339,15 @@ export const POST_CONTENT_MAX = 1000
 // ────────────────────────────────────────────────
 // 12. 帖子字段名（我们内部驼峰 <-> 后端下划线）
 //     映射函数在 src/api/item.ts，这里只放常量方便对照。
+//
+//     ⚠️ v1.1 之后这里**没有 sortBy / sort_by 了**：
+//        P1 的 sort_by 参数被整个移除，comment_count 也随评论模块一起删了。
+//        别照着旧文档加回来。
 // ────────────────────────────────────────────────
 export const POST_QUERY_PARAMS = {
   page: 'page',
   pageSize: 'page_size',
-  sortBy: 'sort_by',
+  order: 'order',
 } as const
 
 // ────────────────────────────────────────────────
@@ -323,3 +361,37 @@ export const ROUTE_ADMIN_ITEMS = '/admin/items'
 export function itemDetailPath(id: number | string): string {
   return `/items/${id}`
 }
+
+// ────────────────────────────────────────────────
+// 14. P5 修改帖子状态（2026-10-02 v1.1 文档变更）
+// ────────────────────────────────────────────────
+/**
+ * ⚠️ 路径在 v1.1 里改过，这是本轮对齐的一处**破坏性变更**：
+ *   v1.0（旧）：PATCH /posts/{post_id}          —— 路径和"帖子详情"完全相同，只靠 method 区分
+ *   v1.1（新）：PATCH /posts/{post_id}/status   —— 多了一段 /status
+ *
+ * 为什么后端要加这一段？因为 PATCH /posts/{id} 太笼统：
+ * 将来想支持"改标题""改地点"，就没法和"改状态"区分开。
+ * 单独给状态一个子资源，语义更清楚。C++ 类比：
+ * 从 `void update(Post&)` 拆成 `void updateStatus(int id, Status)` —— 一个函数只干一件事。
+ *
+ * 所以这里单独写一个函数，不能再用 postPath(id)。
+ */
+export function postStatusPath(id: number | string): string {
+  return `${API_POSTS_PATH}/${id}/status`
+}
+
+/**
+ * P5 的请求体确认弹窗文案。
+ *
+ * v1.1 明确写了状态是**双向**的：`closed` 标记完结，`open` 撤回为进行中（比如误点）。
+ * 所以文案要跟着状态走，不能写死成"标记为已找回"。
+ *
+ * 失物（lost）和招领（found）的说法不一样，这是 v1.1 第 1.7 节新写清楚的：
+ *   open   失物帖显示"未找到"，招领帖显示"待认领"
+ *   closed 失物帖显示"已找到"，招领帖显示"已认领"
+ */
+export const STATUS_TEXT = {
+  lost: { open: '未找到', closed: '已找到' },
+  found: { open: '待认领', closed: '已认领' },
+} as const

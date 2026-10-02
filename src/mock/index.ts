@@ -5,6 +5,7 @@ import type {
   RawPost,
   RawPostBrief,
   RawPostPage,
+  RawStatusPatch,
   CreateItemPayload,
 } from '@/types/api'
 
@@ -34,6 +35,10 @@ export function mockLogin(data: MockLoginParams) {
     refreshToken: `mock-refresh-${Date.now()}`,
     role: (isAdmin ? 'admin' : 'student') as 'student' | 'admin',
     username: isAdmin ? '管理员' : data.studentId,
+    // 假登录的 id 和 MOCK_ME_ID 保持一致，
+    // 这样"我发的帖子 / 我发的评论"在 mock 模式下才认得出是自己。
+    // C++ 类比：假的 session 里也得塞上同一个 uid，否则权限判断对不上号。
+    userId: isAdmin ? 9001 : MOCK_ME_ID,
   }
 }
 
@@ -47,10 +52,16 @@ export function mockRegister(data: MockLoginParams) {
 // ⚠️ 这一点很重要：假数据故意做成"后端返回的原样"，
 //    这样 src/api/item.ts 里的字段转换代码在 USE_MOCK = true 时也会被真正跑一遍。
 //    如果假数据直接写成驼峰，等切到真后端时转换层才第一次执行，很容易翻车。
+//
+// 📌 2026-10-02 v1.1 契约变更后，这里【没有评论假数据了】：
+//    评论模块 C1~C3 被整个删除，comment_count 字段也从 P1/P2 消失。
+//    别照着旧文档把评论假数据加回来。见 types/api.ts 末尾那段说明。
 // =====================================================================
 
 /** 假装当前登录用户的 id，用来实现 mine=true（我发布的） */
-const MOCK_ME_ID = 1001
+export const MOCK_ME_ID = 1001
+/** 假装管理员用户的 id（用 admin 学号登录时用） */
+export const MOCK_ADMIN_ID = 9001
 const MOCK_ME = { id: MOCK_ME_ID, name: '张三', avatar_url: '', role: 'student' }
 
 function author(id: number, name: string, role = 'student') {
@@ -68,7 +79,7 @@ const posts: RawPost[] = [
     location: { name: '图书馆三楼自习区', latitude: 30.2291, longitude: 120.0412 },
     event_time: '2026-09-19T14:00:00+08:00',
     status: 'open',
-    comment_count: 0,
+    closed_at: null,
     author: MOCK_ME,
     is_mine: true,
     can_delete: true,
@@ -83,10 +94,10 @@ const posts: RawPost[] = [
     location: { name: '一教门口', latitude: 30.2301, longitude: 120.042 },
     event_time: '2026-09-20T12:00:00+08:00',
     status: 'closed',
-    comment_count: 0,
+    closed_at: null,
     author: author(1002, '李四'),
     is_mine: false,
-    can_delete: false,
+    can_delete: undefined,
     created_at: '2026-09-20T12:30:00+08:00',
   },
   {
@@ -98,10 +109,10 @@ const posts: RawPost[] = [
     location: { name: '操场', latitude: null, longitude: null },
     event_time: '2026-09-21T19:30:00+08:00',
     status: 'open',
-    comment_count: 0,
+    closed_at: null,
     author: author(1003, '王五'),
     is_mine: false,
-    can_delete: false,
+    can_delete: undefined,
     created_at: '2026-09-21T20:00:00+08:00',
   },
   {
@@ -113,7 +124,7 @@ const posts: RawPost[] = [
     location: { name: '图书馆三楼', latitude: 30.2295, longitude: 120.0418 },
     event_time: '2026-09-22T09:10:00+08:00',
     status: 'open',
-    comment_count: 0,
+    closed_at: null,
     author: MOCK_ME,
     is_mine: true,
     can_delete: true,
@@ -128,10 +139,10 @@ const posts: RawPost[] = [
     location: { name: '二食堂', latitude: 30.2288, longitude: 120.0409 },
     event_time: null,
     status: 'closed',
-    comment_count: 0,
+    closed_at: null,
     author: author(1004, '赵六'),
     is_mine: false,
-    can_delete: false,
+    can_delete: undefined,
     created_at: '2026-09-23T11:15:00+08:00',
   },
   {
@@ -143,10 +154,10 @@ const posts: RawPost[] = [
     location: { name: '三教 205', latitude: null, longitude: null },
     event_time: '2026-09-23T16:00:00+08:00',
     status: 'open',
-    comment_count: 0,
+    closed_at: null,
     author: author(1005, '孙七'),
     is_mine: false,
-    can_delete: false,
+    can_delete: undefined,
     created_at: '2026-09-23T16:20:00+08:00',
   },
 ]
@@ -164,7 +175,7 @@ function toBrief(p: RawPost): RawPostBrief {
     image_count: p.images?.length ?? 0,
     location: p.location,
     status: p.status,
-    comment_count: p.comment_count,
+    closed_at: p.closed_at ?? null,
     author: p.author,
     created_at: p.created_at,
   }
@@ -212,14 +223,36 @@ export function mockGetItemList(query: ItemQuery): RawPostPage {
   }
 }
 
+/**
+ * 假后端自己算"当前用户能不能删这个帖子"（契约 P4：本人【或管理员】）。
+ *
+ * ⚠️ 为什么要按 viewerIsAdmin 现算，而不是把 can_delete 写死在种子数据里？
+ *    写死 = 用假数据把真后端的行为盖住：
+ *      - 管理员登录后看到的还是 false（真后端这时会给 true）
+ *      - "管理员能不能删别人的帖子"这条权限永远测不出来
+ *    这是上一轮（评论模块）实测踩到的坑，这里保持同样的做法。
+ */
+function postCanDeleteFor(post: RawPost, viewerIsAdmin = false): boolean {
+  if (viewerIsAdmin) return true
+  return post.author?.id === MOCK_ME_ID
+}
+
 // ===== P2 帖子详情 =====
-export function mockGetItemDetail(id: number): RawPost {
+export function mockGetItemDetail(id: number, viewerIsAdmin = false): RawPost {
   const found = posts.find((p) => p.id === id)
   if (!found) {
     // 真后端是 404 / 40400，这里抛错让页面走"没有找到这条信息"的分支
     throw new Error('帖子不存在或已删除')
   }
-  return { ...found, is_mine: found.author?.id === MOCK_ME_ID, can_delete: found.author?.id === MOCK_ME_ID }
+  return {
+    ...found,
+    is_mine: found.author?.id === MOCK_ME_ID,
+    can_delete: postCanDeleteFor(found, viewerIsAdmin),
+    // 契约 P2：can_change_status「仅本人为 true」。
+    // 契约第 7 章权限表还写明"修改他人帖子的状态 → 管理员也 ✗"，
+    // 所以这里【不看 viewerIsAdmin】，只认作者本人。
+    can_change_status: found.author?.id === MOCK_ME_ID,
+  }
 }
 
 // ===== P3 发布帖子 =====
@@ -233,22 +266,31 @@ export function mockCreateItem(payload: CreateItemPayload): RawPost {
     location: payload.location,
     event_time: payload.eventTime ?? null,
     status: 'open',
-    comment_count: 0,
+    // 契约 P3：新建的帖子 status 固定为 open，所以 closed_at 一定是 null
+    closed_at: null,
     author: MOCK_ME,
     is_mine: true,
     can_delete: true,
+    // 自己刚发的帖子，当然能改自己的状态
+    can_change_status: true,
     created_at: new Date().toISOString(),
   }
   posts.unshift(created)
   return created
 }
 
-// ===== P5 修改状态（标记已找回 / 已认领），仅发帖人 =====
-export function mockUpdateItemStatus(id: number, status: ItemStatus): RawPost {
+// ===== P5 修改状态，仅发帖人本人 =====
+// v1.1 的返回体只有三个字段：{ id, status, closed_at }
+// （v1.0 返回的是完整帖子详情，已作废 —— 页面也因此必须重新拉一次 P2）
+export function mockUpdateItemStatus(id: number, status: ItemStatus): RawStatusPatch {
   const found = posts.find((p) => p.id === id)
   if (!found) throw new Error('帖子不存在或已删除')
+
   found.status = status
-  return { ...found }
+  // closed_at 跟着状态走：标记完结就记下时间，撤回就清空
+  found.closed_at = status === 'closed' ? new Date().toISOString() : null
+
+  return { id: found.id, status: found.status, closed_at: found.closed_at }
 }
 
 // ===== P4 删除帖子 =====
@@ -274,3 +316,4 @@ export function mockUploadFile(file: { name?: string }): {
     size: 123456,
   }
 }
+

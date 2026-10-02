@@ -14,6 +14,8 @@ import type {
   RawPost,
   RawPostBrief,
   RawPostPage,
+  RawStatusPatch,
+  StatusPatchResult,
 } from '@/types/api'
 import {
   USE_MOCK,
@@ -24,14 +26,13 @@ import {
   mockGetItemList,
   mockUpdateItemStatus,
 } from '@/mock'
-import { API_POSTS_PATH, PAGE_SIZE_DEFAULT, Role, postPath, type RoleValue } from '@/utils/contract'
+import { API_POSTS_PATH, PAGE_SIZE_DEFAULT, Role, postPath, postStatusPath, type RoleValue } from '@/utils/contract'
 
 // =====================================================================
 // 帖子（帖子 = 我们以前说的"物品"，只是名字对齐契约）
 //
-// 这个文件是【唯一】发生"下划线 <-> 驼峰"转换的地方。
-//   后端给的：created_at / cover_url / content_preview / event_time ...
-//   页面用的：createdAt  / coverUrl  / contentPreview / eventTime ...
+// 这个文件是发生"下划线 <-> 驼峰"转换的两个地方之一（另一个是 utils/contract.ts
+// 里的通用取值函数）。页面永远只见到驼峰字段。
 //
 // 为什么要多这一层？
 //   1. 后端将来改字段名，只改这个文件，页面一行都不用动。
@@ -39,12 +40,17 @@ import { API_POSTS_PATH, PAGE_SIZE_DEFAULT, Role, postPath, type RoleValue } fro
 //      页面永远不会拿到 undefined 去渲染，也就不会白屏。
 //   3. 转换代码只写一遍。要是散在 6 个页面里，漏一个就是线上 bug。
 //
-// 对应的接口（文档 5 章）：
-//   P1 GET    /posts            列表（首页 / 搜索 / 我的帖子 都用它）
-//   P2 GET    /posts/{post_id}   详情
-//   P3 POST   /posts            发布
-//   P4 DELETE /posts/{post_id}   删除（本人或管理员）
-//   P5 PATCH  /posts/{post_id}   改状态（仅发帖人）
+// 对应的接口（2026-10-02 v1.1 文档第 5 章）：
+//   P1 GET    /posts                  列表（首页 / 搜索 / 我的帖子 都用它）
+//   P2 GET    /posts/{post_id}         详情
+//   P3 POST   /posts                  发布
+//   P4 DELETE /posts/{post_id}         删除（本人或管理员）
+//   P5 PATCH  /posts/{post_id}/status  改状态（仅发帖人本人）
+//
+// ⚠️ v1.1 相对 v1.0 在这个文件里的三处变化：
+//   1. P5 路径多了 /status（以前和 P2 同路径，只靠 method 区分）
+//   2. P5 返回体从"完整详情"缩成 { id, status, closed_at }
+//   3. P1 去掉了 sort_by 参数；P1 / P2 去掉了 comment_count 字段
 // =====================================================================
 
 // ---------------------------------------------------------------------
@@ -102,9 +108,9 @@ function toBrief(raw: RawPostBrief): ItemBrief {
     imageCount: raw.image_count ?? 0,
     location: toLocation(raw.location),
     status: toStatus(raw.status),
-    commentCount: raw.comment_count ?? 0,
     author: toAuthor(raw.author),
     createdAt: raw.created_at ?? '',
+    closedAt: raw.closed_at ?? null,
   }
 }
 
@@ -119,11 +125,26 @@ function toItem(raw: RawPost): Item {
     location: toLocation(raw.location),
     eventTime: raw.event_time ?? null,
     status: toStatus(raw.status),
-    commentCount: raw.comment_count ?? 0,
     author: toAuthor(raw.author),
     isMine: raw.is_mine ?? false,
     canDelete: raw.can_delete ?? false,
+    // fail-closed：后端没给这个字段就当"不能改"，绝不默认放开
+    canChangeStatus: raw.can_change_status ?? false,
     createdAt: raw.created_at ?? '',
+    closedAt: raw.closed_at ?? null,
+  }
+}
+
+/**
+ * P5 返回体：后端原始形状 -> 内部形状（v1.1）。
+ * 和 toItem 分开写：契约只给 id / status / closed_at 三个字段，
+ * 拿它去走 toItem 会凭空造出一堆默认值（标题变成空字符串等）。
+ */
+function toStatusPatch(raw: RawStatusPatch): StatusPatchResult {
+  return {
+    id: raw.id ?? 0,
+    status: toStatus(raw.status),
+    closedAt: raw.closed_at ?? null,
   }
 }
 
@@ -137,6 +158,10 @@ function toItem(raw: RawPost): Item {
  * 注意这里"空的参数直接不放进去"：
  *   type=all 是前端下拉框的"全部"，契约里没有 all 这个值，
  *   所以不能发出去，不发就等于"不筛选"。
+ *
+ * ⚠️ v1.1 之后这里【没有 sort_by 了】：P1 的 sort_by 参数被整个移除，
+ *    只保留 order（按发布时间 asc / desc）。
+ *    详见 types/api.ts 里 ItemQuery 的注释。
  */
 function toQueryParams(params: ItemQuery): Record<string, unknown> {
   const q: Record<string, unknown> = {
@@ -148,7 +173,6 @@ function toQueryParams(params: ItemQuery): Record<string, unknown> {
   if (params.status && params.status !== 'all') q.status = params.status
   if (params.keyword && params.keyword.trim()) q.keyword = params.keyword.trim()
   if (params.mine) q.mine = true
-  if (params.sortBy) q.sort_by = params.sortBy
   if (params.order) q.order = params.order
 
   return q
@@ -237,19 +261,37 @@ export async function createItem(payload: CreateItemPayload): Promise<Item> {
 }
 
 /**
- * P5 修改帖子状态（标记已找回 / 已认领）。
+ * P5 修改帖子状态（标记已找到 / 已认领，或撤回为进行中）。
  *
- * 注意契约里写明【只有发帖人本人】能改，
- * 所以这个按钮只在详情页 isMine 为 true 时才显示，
- * 管理端不提供"改状态"，管理员要做的是删除（P4）。
+ * v1.1 有**两处破坏性变更**，都在这个函数里：
+ *
+ *   1. 路径多了 `/status`：
+ *        旧 PATCH /posts/{id}      →  新 PATCH /posts/{id}/status
+ *        所以这里用 postStatusPath(id)，不能用 postPath(id)。
+ *
+ *   2. 返回体变了：
+ *        旧：完整帖子详情            新：{ id, status, closed_at }
+ *        所以**不能**再走 toItem()。走了的话标题、正文全变成空字符串，
+ *        用户会看到"改完状态之后标题没了"。
+ *        这里单独用一个小的映射，诚实反映契约。
+ *
+ * ⚠️ 权限：契约第 7 章权限表写明"修改他人帖子的状态 → 管理员也 ✗"。
+ *    所以按钮只在 canChangeStatus 为 true 时显示，管理端【不提供】这个操作。
  */
-export async function updateItemStatus(id: number, status: ItemStatus): Promise<Item> {
+export async function updateItemStatus(
+  id: number,
+  status: ItemStatus,
+): Promise<StatusPatchResult> {
   if (USE_MOCK) {
     await delay()
-    return toItem(mockUpdateItemStatus(id, status))
+    return toStatusPatch(mockUpdateItemStatus(id, status))
   }
-  return toItem(
-    await http<RawPost>({ url: postPath(id), method: 'patch', data: { status } }),
+  return toStatusPatch(
+    await http<RawStatusPatch>({
+      url: postStatusPath(id),
+      method: 'patch',
+      data: { status },
+    }),
   )
 }
 

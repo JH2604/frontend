@@ -2,10 +2,11 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import type { Item, ItemStatus } from '@/types/api'
+import type { Item, ItemStatus, UserProfile } from '@/types/api'
 import { deleteItem, getItemDetail, updateItemStatus } from '@/api/item'
+import { getUserProfile } from '@/api/user'
 import StatusTag from '@/components/StatusTag.vue'
-import { ROUTE_HOME, STATUS_TEXT } from '@/utils/contract'
+import { ROUTE_HOME, STATUS_TEXT, messageChatPath } from '@/utils/contract'
 import { formatDateTime, fromNow } from '@/utils/format'
 
 const route = useRoute()
@@ -13,6 +14,35 @@ const router = useRouter()
 
 const loading = ref(false)
 const detail = ref<Item | null>(null)
+
+/**
+ * 发帖人的可联系状态（U6 查询结果）。
+ *
+ * 为什么要先查一次 U6，而不是直接放一个"私信"按钮？
+ *   契约第 6 章开头写着"站内私信是用户之间唯一的联系方式"，
+ *   但"能不能私信这个人"是后端说了算的（比如不能私信自己）。
+ *   U6 返回里的 `can_message` 就是这个答案。
+ *
+ *   按交接说明第 9 节第 6 条：**知道后端一定会拒绝的操作，前端不要给出入口**。
+ *   所以这里先问，拿到了 canMessage 才决定按钮显不显示。
+ *   代价是多一次请求，换来的是"按钮点了一定能用"。
+ */
+const authorProfile = ref<UserProfile | null>(null)
+const profileLoading = ref(false)
+
+/** U6 查发帖人的联系能力（拿到 canMessage / canRemind） */
+async function fetchAuthorProfile(authorId: number) {
+  profileLoading.value = true
+  try {
+    authorProfile.value = await getUserProfile(authorId)
+  } catch {
+    // 查不到就当"不能私信"（fail-closed）：提示已经由拦截器弹过了，
+    // 这里静默降级，绝不让"查用户失败"把整个详情页搞崩。
+    authorProfile.value = null
+  } finally {
+    profileLoading.value = false
+  }
+}
 
 /**
  * 当前状态下"这个按钮按下去会变成什么"。
@@ -44,15 +74,33 @@ async function fetchDetail() {
   loading.value = true
   try {
     detail.value = await getItemDetail(Number(route.params.id))
+    // 详情拿到之后再查发帖人的联系能力（不需要等它，界面先出来）
+    fetchAuthorProfile(detail.value.author.id)
   } catch (err) {
     // 后端返回 40400（资源不存在）时走到这个分支。
     // 关键点：绝不能白屏 —— 把 detail 置成 null，
     // 下面的模板就会渲染"没有找到这条信息"那张空状态卡片。
     detail.value = null
+    authorProfile.value = null
     ElMessage.error(err instanceof Error ? err.message : '这条信息不存在或已被删除')
   } finally {
     loading.value = false
   }
+}
+
+/**
+ * 私信发帖人（跳到聊天页）。
+ *
+ * 带上 post_id 让后端知道"这条私信是从哪个帖子发起的"——
+ * 契约 M4 的 post_id 字段就是这个用途，对方在消息列表里能看到"来自帖子 xxx"。
+ * 我们在跳转时用 query 把帖子 id 带过去，聊天页再发给后端。
+ */
+function handleMessage() {
+  if (!detail.value) return
+  router.push({
+    path: messageChatPath(detail.value.author.id),
+    query: { postId: String(detail.value.id) },
+  })
 }
 
 /**
@@ -175,6 +223,22 @@ onMounted(fetchDetail)
       </div>
 
       <div class="actions">
+        <!-- 私信发帖人（v1.1 契约第 6 章 + U6）。
+             v1.1 把私信定为"用户之间唯一的联系方式"，所以详情页要给入口。
+
+             ⚠️ 三个条件缺一不可：
+               1. authorProfile 拿到了（U6 请求成功）
+               2. canMessage 为 true（后端说的，不是我们猜的；比如不能私信自己）
+               3. 不是我自己发的帖子（自己跟自己聊没意义，后端也会拒）
+             这就是"知道后端一定会拒绝的操作，前端不要给出入口"。 -->
+        <el-button
+          v-if="authorProfile?.canMessage && !detail.isMine"
+          :loading="profileLoading"
+          @click="handleMessage"
+        >
+          私信 TA
+        </el-button>
+
         <!-- 改状态按钮（P5）。
              判断用后端给的 canChangeStatus，不用 isMine（原因见 script 里的注释）。
              文案随"帖子类型 + 目标状态"变：

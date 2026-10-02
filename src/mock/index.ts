@@ -2,11 +2,21 @@ import type {
   ItemQuery,
   ItemStatus,
   ItemType,
+  MarkReadPayload,
+  MessageQuery,
+  RawConversation,
+  RawMarkRead,
+  RawMessageBrief,
+  RawMessagePage,
   RawPost,
   RawPostBrief,
   RawPostPage,
+  RawSendMessage,
   RawStatusPatch,
+  RawUserProfile,
+  ConversationQuery,
   CreateItemPayload,
+  SendMessagePayload,
 } from '@/types/api'
 
 // ===== 总开关 =====
@@ -317,3 +327,444 @@ export function mockUploadFile(file: { name?: string }): {
   }
 }
 
+
+
+// =====================================================================
+// 消息假数据（v1.1 文档第 6 章，M1~M5）
+//
+// ⚠️ 同样按契约的【原始形状】写：direction / peer / is_read / reminded / created_at
+//    这样 src/api/message.ts 里的字段转换代码在 mock 模式下也会被真跑一遍。
+//
+// ⚠️ v1.1 删掉了 `kind` 字段（不再分 private / comment）。
+//    如果你的记忆里还有 kind，那是 v1.0，别加回来。
+//
+// 【为什么假数据存在"原始数组"里，而不是提前算好 peer】
+//   peer 是"对方"，而"对方是谁"取决于**看的人是谁**：
+//   我发出的消息，对方是接收人；我收到的消息，对方是发送人。
+//   所以 peer 必须在查询的时候现算（见 toMessageBrief），
+//   不能存成一个固定字段 —— 这和 can_delete 不能写死是同一个道理。
+// =====================================================================
+
+/** 假数据的 id 段位（和帖子 1xx、评论曾经用过的 9xxx 都错开） */
+const MSG_IDS = {
+  LI_SI_ASK: 7001,
+  ME_ANSWER: 7002,
+  LI_SI_ASK_CARD: 7003,
+  ME_ANSWER_CARD: 7004,
+  WANG_WU_HELLO: 7005,
+  ME_ANSWER_WANG: 7006,
+  ME_ASK_ADMIN: 7007,
+  ZHAO_LIU_ASK: 7008,
+  SUN_QI_ASK: 7009,
+  ME_GROUP_REPLY: 7010,
+} as const
+
+/** 假数据里用到的用户 id（页面可以直接引用，别写魔法数字） */
+export const MOCK_PEER_LI_SI = 1002
+export const MOCK_PEER_WANG_WU = 1003
+export const MOCK_PEER_ZHAO_LIU = 1004
+export const MOCK_PEER_SUN_QI = 1005
+
+/** 假数据里那个"王老师"管理员的 id */
+export const MOCK_PEER_ADMIN = 1
+
+interface MockMessageRecord {
+  id: number
+  sender_id: number
+  receiver_id: number
+  content: string
+  /** 关联帖子（从帖子详情发起私信时才有） */
+  post_id: number | null
+  is_read: boolean
+  reminded: boolean
+  created_at: string
+}
+
+/** 只给"我"和这四个人之间造消息，方便演示 */
+function messageAuthor(id: number) {
+  if (id === MOCK_ADMIN_ID) return author(MOCK_ADMIN_ID, '王老师', 'admin')
+  if (id === MOCK_ME_ID) return MOCK_ME
+  const names: Record<number, string> = {
+    [MOCK_PEER_LI_SI]: '李四',
+    [MOCK_PEER_WANG_WU]: '王五',
+    [MOCK_PEER_ZHAO_LIU]: '赵六',
+    [MOCK_PEER_SUN_QI]: '孙七',
+  }
+  return author(id, names[id] ?? `用户${id}`)
+}
+
+let nextMessageId = 7100
+
+const messages: MockMessageRecord[] = [
+  // ── 和李四：关于「白色无线耳机」（帖子 4）──
+  {
+    id: MSG_IDS.LI_SI_ASK,
+    sender_id: MOCK_PEER_LI_SI,
+    receiver_id: MOCK_ME_ID,
+    content: '你好，那副白色无线耳机是我的，请问在图书馆哪个服务台？',
+    post_id: 4,
+    is_read: false, // ← 未读，用来演示小红点
+    reminded: false,
+    created_at: '2026-10-01T10:00:00+08:00',
+  },
+  {
+    id: MSG_IDS.ME_ANSWER,
+    sender_id: MOCK_ME_ID,
+    receiver_id: MOCK_PEER_LI_SI,
+    content: '三楼服务台，我交到那里了，你报一下耳机的特征就行。',
+    post_id: 4,
+    is_read: true, // 发出的消息，true 表示"对方已读"
+    reminded: true,
+    created_at: '2026-10-01T10:20:00+08:00',
+  },
+
+  // ── 和李四：关于「校园卡一张」（帖子 2）──
+  {
+    id: MSG_IDS.LI_SI_ASK_CARD,
+    sender_id: MOCK_PEER_LI_SI,
+    receiver_id: MOCK_ME_ID,
+    content: '校园卡是不是蓝色卡套的？我丢的那张正好是蓝色的。',
+    post_id: 2,
+    is_read: false, // ← 第二条未读
+    reminded: false,
+    created_at: '2026-10-01T13:00:00+08:00',
+  },
+  {
+    id: MSG_IDS.ME_ANSWER_CARD,
+    sender_id: MOCK_ME_ID,
+    receiver_id: MOCK_PEER_LI_SI,
+    content: '不是蓝色，是透明卡套。可能不是你的那张。',
+    post_id: 2,
+    is_read: false, // 对方还没读
+    reminded: false,
+    created_at: '2026-10-01T13:10:00+08:00',
+  },
+
+  // ── 和王五 ──
+  {
+    id: MSG_IDS.WANG_WU_HELLO,
+    sender_id: MOCK_PEER_WANG_WU,
+    receiver_id: MOCK_ME_ID,
+    content: '在操场捡到一串钥匙，上面有小熊挂件，是你的吗？',
+    post_id: 3,
+    is_read: true,
+    reminded: false,
+    created_at: '2026-09-30T19:00:00+08:00',
+  },
+  {
+    id: MSG_IDS.ME_ANSWER_WANG,
+    sender_id: MOCK_ME_ID,
+    receiver_id: MOCK_PEER_WANG_WU,
+    content: '是的！我明天下午去找你拿，谢谢！',
+    post_id: 3,
+    is_read: true,
+    reminded: true,
+    created_at: '2026-09-30T19:15:00+08:00',
+  },
+
+  // ── 和"王老师"管理员（没有关联帖子）──
+  {
+    id: MSG_IDS.ME_ASK_ADMIN,
+    sender_id: MOCK_ME_ID,
+    receiver_id: MOCK_PEER_ADMIN,
+    content: '老师您好，想问一下捡到的东西可以交到哪个办公室？',
+    post_id: null,
+    is_read: true,
+    reminded: false,
+    created_at: '2026-09-29T09:00:00+08:00',
+  },
+
+  // ── 和赵六、孙七：各一条收到的未读 ──
+  {
+    id: MSG_IDS.ZHAO_LIU_ASK,
+    sender_id: MOCK_PEER_ZHAO_LIU,
+    receiver_id: MOCK_ME_ID,
+    content: '你发的那个蓝色雨伞还在吗？我舍友前天在二食堂丢了一把。',
+    post_id: 5,
+    is_read: false, // ← 第三条未读
+    reminded: false,
+    created_at: '2026-09-28T16:00:00+08:00',
+  },
+  {
+    id: MSG_IDS.SUN_QI_ASK,
+    sender_id: MOCK_PEER_SUN_QI,
+    receiver_id: MOCK_ME_ID,
+    content: '那本《数据结构》教材我领回来了，谢谢你还特地发帖！',
+    post_id: 6,
+    is_read: true,
+    reminded: false,
+    created_at: '2026-09-27T11:00:00+08:00',
+  },
+  {
+    id: MSG_IDS.ME_GROUP_REPLY,
+    sender_id: MOCK_ME_ID,
+    receiver_id: MOCK_PEER_SUN_QI,
+    content: '不客气，找到就好。',
+    post_id: 6,
+    is_read: true,
+    reminded: false,
+    created_at: '2026-09-27T11:30:00+08:00',
+  },
+]
+
+/** 按时间倒序（新的在前），和帖子列表一致 */
+function byCreatedDesc(a: MockMessageRecord, b: MockMessageRecord): number {
+  return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+}
+
+/**
+ * 把一条记录转成契约 M2 的形状。
+ *
+ * ⚠️ 这里就是"peer 必须现算"的地方：当前用户视角下，
+ *    我发出的 → peer 是接收人；我收到的 → peer 是发送人。
+ */
+function toRawBrief(m: MockMessageRecord, viewerId: number): RawMessageBrief {
+  const isSent = m.sender_id === viewerId
+  return {
+    id: m.id,
+    direction: isSent ? 'sent' : 'received',
+    peer: messageAuthor(isSent ? m.receiver_id : m.sender_id),
+    content: m.content,
+    // 从 post_id 反查帖子标题，模拟后端 join 出来的 { id, title }
+    post: m.post_id === null ? null : { id: m.post_id, title: postTitle(m.post_id) },
+    is_read: m.is_read,
+    reminded: m.reminded,
+    created_at: m.created_at,
+  }
+}
+
+function postTitle(postId: number): string {
+  return posts.find((p) => p.id === postId)?.title ?? ''
+}
+
+// ===== M1 未读私信数 =====
+/**
+ * 只数"我收到的且未读"的。
+ *
+ * ⚠️ 为什么不数我发出的？
+ *    因为"未读"是**收件人的**状态。我发出的消息里 is_read 表示"对方读没读"，
+ *    那不是我的未读。契约 M1 说的是"未读私信数（首页小红点）"，
+ *    小红点是提醒"有人给你发消息你还没看"，所以只数收到的。
+ *    这是本模块最容易搞错的一处。
+ */
+export function mockGetUnreadCount(viewerId = MOCK_ME_ID): number {
+  const viewer = viewerId || MOCK_ME_ID
+  return messages.filter((m) => m.receiver_id === viewer && !m.is_read).length
+}
+
+// ===== M2 我的消息 =====
+export function mockGetMessageList(query: MessageQuery, viewerId = MOCK_ME_ID): RawMessagePage {
+  const viewer = viewerId || MOCK_ME_ID
+
+  // 只返回和我有关的（发出的 + 收到的）
+  let list = messages.filter((m) => m.sender_id === viewer || m.receiver_id === viewer)
+
+  // box：all / sent / received
+  if (query.box === 'sent') list = list.filter((m) => m.sender_id === viewer)
+  if (query.box === 'received') list = list.filter((m) => m.receiver_id === viewer)
+
+  // is_read：契约是"不传返回全部；false 只看未读"
+  if (query.isRead === false) list = list.filter((m) => !m.is_read)
+  if (query.isRead === true) list = list.filter((m) => m.is_read)
+
+  const sorted = list.slice().sort(byCreatedDesc)
+
+  const pageSize = query.pageSize || 20
+  const page = query.page || 1
+  const start = (page - 1) * pageSize
+
+  return {
+    list: sorted.slice(start, start + pageSize).map((m) => toRawBrief(m, viewer)),
+    total: sorted.length,
+    page,
+    page_size: pageSize,
+  }
+}
+
+// ===== M3 私信记录（游标分页）=====
+export function mockGetConversation(
+  peerId: number,
+  query: ConversationQuery = {},
+  viewerId = MOCK_ME_ID,
+): RawConversation {
+  const viewer = viewerId || MOCK_ME_ID
+
+  // 我和这个人之间的所有消息
+  const both = messages.filter(
+    (m) =>
+      (m.sender_id === viewer && m.receiver_id === peerId) ||
+      (m.sender_id === peerId && m.receiver_id === viewer),
+  )
+
+  // 游标：只取 before_id 之前的
+  const filtered = query.beforeId ? both.filter((m) => m.id < query.beforeId!) : both
+
+  // ⚠️ 契约原文：list 按时间【正序】排列，方便直接渲染聊天气泡。
+  //    注意和 M2 相反（M2 是新的在前）。这是文档明确写的，别"统一"掉。
+  const ascending = filtered.slice().sort((a, b) => a.id - b.id)
+
+  const limit = Math.min(query.limit ?? 20, 50)
+  // 游标分页取的是"最新的 limit 条"（然后仍然正序返回），
+  // 所以从尾部往前切，而不是从头切
+  const hasMore = ascending.length > limit
+  const pageItems = hasMore ? ascending.slice(ascending.length - limit) : ascending
+
+  // mark_read 默认 true：进聊天页就把对方发给我的标为已读
+  if (query.markRead !== false) {
+    for (const m of pageItems) {
+      if (m.receiver_id === viewer) m.is_read = true
+    }
+  }
+
+  // ⚠️ can_remind 的含义（契约）：对方绑了手机/邮箱 且 没关提醒。
+  //    假实现里给一个"王老师没绑手机"的例外，方便演示"开关不显示"的情况。
+  const canRemind = peerId !== MOCK_PEER_ADMIN
+
+  return {
+    peer: messageAuthor(peerId),
+    can_remind: canRemind,
+    list: pageItems.map((m) => ({
+      id: m.id,
+      direction: m.sender_id === viewer ? 'sent' : 'received',
+      content: m.content,
+      is_read: m.is_read,
+      reminded: m.reminded,
+      created_at: m.created_at,
+    })),
+    has_more: hasMore,
+  }
+}
+
+// ===== M4 发送私信 =====
+export function mockSendMessage(
+  payload: SendMessagePayload,
+  senderId = MOCK_ME_ID,
+): RawSendMessage {
+  const sender = senderId || MOCK_ME_ID
+
+  // 假后端也会像真后端一样校验一下"能不能私信自己"，
+  // 这样前端万一漏了判断，测试能发现（真后端会返回 40300）
+  const selfSend = payload.receiverId === sender
+
+  const created: MockMessageRecord = {
+    id: nextMessageId++,
+    sender_id: sender,
+    receiver_id: payload.receiverId,
+    content: payload.content,
+    post_id: payload.postId ?? null,
+    // 自己刚发的消息，对方当然还没读
+    is_read: false,
+    // reminded 由下面的提醒逻辑决定
+    reminded: false,
+    created_at: new Date().toISOString(),
+  }
+
+  // ⚠️ 提醒失败不影响私信本身（契约原文），所以先把消息存进去
+  messages.push(created)
+
+  // 假后端算提醒结果，规则和契约的表格一一对应
+  let remind: { status: string; channel: string | null; reason: string | null }
+  if (!payload.remind) {
+    remind = { status: 'skipped', channel: null, reason: 'not_requested' }
+  } else if (selfSend) {
+    // 界面上不该出现这种情况，真后端会直接 40300
+    remind = { status: 'skipped', channel: null, reason: 'no_contact' }
+  } else if (payload.receiverId === MOCK_PEER_ADMIN) {
+    // 王老师没绑手机/邮箱 —— 用来演示"对方没有联系方式"
+    remind = { status: 'skipped', channel: null, reason: 'no_contact' }
+  } else {
+    // 有手机号就发短信（契约的渠道选择规则：有手机号发短信，否则发邮件）
+    remind = { status: 'sent', channel: 'sms', reason: null }
+    created.reminded = true
+  }
+
+  return {
+    message: {
+      id: created.id,
+      direction: 'sent',
+      content: created.content,
+      is_read: created.is_read,
+      reminded: created.reminded,
+      created_at: created.created_at,
+    },
+    remind,
+  }
+}
+
+// ===== M5 标记已读 =====
+export function mockMarkRead(payload: MarkReadPayload, viewerId = MOCK_ME_ID): RawMarkRead {
+  const viewer = viewerId || MOCK_ME_ID
+  let updated = 0
+
+  for (const m of messages) {
+    // 只有"我收到的"才谈得上"我把它标为已读"
+    if (m.receiver_id !== viewer) continue
+
+    const hit = payload.ids && payload.ids.length > 0
+      ? payload.ids.includes(m.id)
+      : payload.peerId
+        ? m.sender_id === payload.peerId
+        : true // all
+
+    if (hit && !m.is_read) {
+      m.is_read = true
+      updated += 1
+    }
+  }
+
+  return { updated, unread_total: mockGetUnreadCount(viewer) }
+}
+
+// ===== U6 查看发帖人信息 =====
+/**
+ * 假实现要模拟两件真后端会做的事：
+ *   1. **按查看者角色**决定给不给 detail（契约：普通用户看不到学号/手机/邮箱）
+ *   2. can_message / can_remind 现算（不能私信自己）
+ *
+ * ⚠️ 第 1 点是契约里少见的"后端控制字段可见性"设计，原话是：
+ *    「同一个接口按查看者角色返回不同字段，由后端控制，不靠前端隐藏」
+ *    所以假后端也必须真的**不返回** detail，而不是返回了让前端去藏 ——
+ *    否则前端"隐藏"这件事根本没被测到。
+ */
+export function mockGetUserProfile(
+  userId: number,
+  viewerId = MOCK_ME_ID,
+  viewerIsAdmin = false,
+): RawUserProfile {
+  const isSelf = userId === (viewerId || MOCK_ME_ID)
+
+  // 只给已知的几个假用户造资料，其他人给一份通用资料
+  const known: Record<number, { name: string; role: string; posts: number }> = {
+    [MOCK_ME_ID]: { name: '张三', role: 'student', posts: 2 },
+    [MOCK_PEER_LI_SI]: { name: '李四', role: 'student', posts: 1 },
+    [MOCK_PEER_WANG_WU]: { name: '王五', role: 'student', posts: 0 },
+    [MOCK_PEER_ZHAO_LIU]: { name: '赵六', role: 'student', posts: 1 },
+    [MOCK_PEER_SUN_QI]: { name: '孙七', role: 'student', posts: 1 },
+    [MOCK_ADMIN_ID]: { name: '王老师', role: 'admin', posts: 0 },
+    [MOCK_PEER_ADMIN]: { name: '王老师', role: 'admin', posts: 0 },
+  }
+  const info = known[userId] ?? { name: `用户${userId}`, role: 'student', posts: 0 }
+
+  return {
+    id: userId,
+    name: info.name,
+    avatar_url: `https://cdn.example.com/avatar/${userId}.png`,
+    role: info.role,
+    post_count: info.posts,
+    // 契约：不能私信自己
+    can_message: !isSelf,
+    // 王老师没绑联系方式，所以不能提醒他
+    can_remind: !isSelf && userId !== MOCK_PEER_ADMIN,
+    // ⚠️ 只有管理员查看时才有 detail。普通用户这里是 null。
+    detail: viewerIsAdmin
+      ? {
+          student_id: `2021${String(userId).padStart(6, '0')}`,
+          phone: userId === MOCK_PEER_ADMIN ? null : `138${String(userId).padStart(8, '0')}`,
+          email: `user${userId}@example.com`,
+          allow_remind: true,
+          created_at: '2026-09-01T09:00:00+08:00',
+          last_login_at: '2026-10-02T18:30:00+08:00',
+        }
+      : null,
+  }
+}

@@ -239,6 +239,259 @@ export interface RawStatusPatch {
 }
 
 // =====================================================================
+// 消息模块（v1.1 文档第 6 章，M1~M5）
+//
+// v1.1 相比 v1.0 的三处结构性变化（写在这里免得又照旧文档写）：
+//   1. 删掉 `kind` 字段（不再分 private / comment）—— 评论模块整个没了
+//   2. 新增 `reminded` 字段（这条私信是否触发过短信 / 邮件提醒）
+//   3. 编号整体前移（旧 M4→M3、旧 M5→M4、旧 M6→M5），旧 M3 会话列表被删
+// =====================================================================
+
+/** 消息方向：sent 我发出的 / received 我收到的 */
+export type MessageDirection = 'sent' | 'received'
+
+/** M2 的筛选：all 全部 / sent 我发出的 / received 我收到的 */
+export type MessageBox = MessageDirection | 'all'
+
+/** 关联帖子（从帖子详情页发起私信时才有） */
+export interface MessagePostRef {
+  id: number
+  title: string
+}
+
+/**
+ * M2 消息列表项。
+ *
+ * ⚠️ `peer` 是"对方"：我发出的 → 接收人；我收到的 → 发送人。
+ *    后端已经帮我们把方向算好了，前端不要自己去猜。
+ */
+export interface MessageBrief {
+  id: number
+  direction: MessageDirection
+  peer: Author
+  content: string
+  /** 从帖子详情发起私信时的关联帖子，否则为 null */
+  post: MessagePostRef | null
+  /** 收到的消息：我是否已读；发出的消息：对方是否已读 */
+  isRead: boolean
+  /** 这条私信是否触发过短信 / 邮件提醒（只有 sent 有意义） */
+  reminded: boolean
+  createdAt: string
+}
+
+/** M2 列表的查询参数（前端内部形状） */
+export interface MessageQuery extends PageQuery {
+  box?: MessageBox
+  /** true 只看未读。注意契约里是"不传返回全部"，所以这里用 undefined 表示不筛选 */
+  isRead?: boolean
+}
+
+/**
+ * M3 私信记录里的一条消息。
+ *
+ * 和 MessageBrief 的区别：**没有 peer**。
+ * 因为整条会话都是和同一个人聊的，对方信息在响应体的 `peer` 里给一次就够了，
+ * 每条都重复带一遍是浪费带宽。契约就是这么设计的，所以这里分成两个类型。
+ */
+export interface ChatMessage {
+  id: number
+  direction: MessageDirection
+  content: string
+  isRead: boolean
+  reminded: boolean
+  createdAt: string
+}
+
+/**
+ * M3 私信记录的完整返回。
+ *
+ * ⚠️ M3 用的是**游标分页**（`before_id` + `has_more`），不是 page / page_size。
+ *    为什么聊天记录要用游标？因为聊天是"不断往上追加"的：
+ *    用页码的话，你翻到第 2 页时如果来了新消息，整个页码都会错位，
+ *    出现"翻页看到重复消息"。游标（记住最后一条的 id）就没这个问题。
+ *    C++ 类比：用 `list::iterator` 而不是 `vector::operator[]` 的下标 ——
+ *    容器变了，迭代器仍然指向同一条数据。
+ */
+export interface Conversation {
+  peer: Author
+  /** 能否提醒对方（对方绑了手机/邮箱 且 没关提醒）。决定界面上显不显示"提醒对方"开关 */
+  canRemind: boolean
+  /** 按时间【正序】排列，方便直接渲染聊天气泡（契约原文） */
+  list: ChatMessage[]
+  hasMore: boolean
+}
+
+/** M3 的查询参数（游标分页） */
+export interface ConversationQuery {
+  /** 加载这条消息【之前】的记录；不传表示最新 */
+  beforeId?: number
+  limit?: number
+  /** 是否把对方发给我的消息标记为已读，默认 true */
+  markRead?: boolean
+}
+
+/** M4 发送私信的结果里，提醒那一部分（契约叫 remind 对象） */
+export interface RemindResult {
+  status: string
+  channel: string | null
+  reason: string | null
+}
+
+/**
+ * M4 发送私信的结果。
+ *
+ * ⚠️ v1.1 的返回体是**嵌套**的，和 v1.0 不一样：
+ *   v1.0：data 直接就是消息对象
+ *   v1.1：data = { message: {...}, remind: { status, channel, reason } }
+ * 所以映射的时候要往里剥一层，别照着旧文档写。
+ */
+export interface SendMessageResult {
+  message: ChatMessage
+  remind: RemindResult
+}
+
+/** M4 发送私信的入参（前端内部形状） */
+export interface SendMessagePayload {
+  receiverId: number
+  content: string
+  /** 从帖子详情页发起私信时带上，对方能看到"来自帖子 xxx" */
+  postId?: number
+  /** 是否请求短信 / 邮件提醒对方，默认 false */
+  remind?: boolean
+}
+
+/** M5 标记已读的入参：三种用法任选其一 */
+export interface MarkReadPayload {
+  ids?: number[]
+  peerId?: number
+  all?: boolean
+}
+
+/** M1 未读数的返回 */
+export interface UnreadCount {
+  total: number
+}
+
+/** M5 标记已读的返回（v1.1：可以直接拿它更新小红点，不用再调 M1） */
+export interface MarkReadResult {
+  updated: number
+  unreadTotal: number
+}
+
+// ---- 以下是"后端返回的原始形状"（下划线命名） ----
+
+export interface RawMessageBrief {
+  id?: number | null
+  direction?: string | null
+  peer?: RawAuthor | null
+  content?: string | null
+  post?: { id?: number | null; title?: string | null } | null
+  is_read?: boolean | null
+  reminded?: boolean | null
+  created_at?: string | null
+}
+
+export interface RawMessagePage {
+  list?: RawMessageBrief[] | null
+  total?: number | null
+  page?: number | null
+  page_size?: number | null
+}
+
+export interface RawChatMessage {
+  id?: number | null
+  direction?: string | null
+  content?: string | null
+  is_read?: boolean | null
+  reminded?: boolean | null
+  created_at?: string | null
+}
+
+export interface RawConversation {
+  peer?: RawAuthor | null
+  can_remind?: boolean | null
+  list?: RawChatMessage[] | null
+  has_more?: boolean | null
+}
+
+export interface RawRemindResult {
+  status?: string | null
+  channel?: string | null
+  reason?: string | null
+}
+
+export interface RawSendMessage {
+  message?: RawChatMessage | null
+  remind?: RawRemindResult | null
+}
+
+export interface RawUnreadCount {
+  total?: number | null
+}
+
+export interface RawMarkRead {
+  updated?: number | null
+  unread_total?: number | null
+}
+
+// =====================================================================
+// 用户信息（U6，v1.1 文档 3 章）
+//
+// 契约特别强调："同一个接口按查看者角色返回不同字段，由后端控制，不靠前端隐藏"。
+// 所以前端的做法是：**只渲染后端给了的字段**，不要自己拿 role 去猜该藏什么。
+// =====================================================================
+
+/** U6 返回的公开信息（普通用户和管理员都能看到） */
+export interface UserPublic {
+  id: number
+  name: string
+  avatarUrl: string
+  role: RoleValue
+  postCount: number
+  /** 能否私信对方（不能私信自己） */
+  canMessage: boolean
+  /** 能否在私信里勾选"提醒对方" */
+  canRemind: boolean
+}
+
+/** 管理员才能看到的信息（普通用户看时 detail 固定为 null） */
+export interface UserDetail {
+  studentId: string
+  phone: string | null
+  email: string | null
+  allowRemind: boolean
+  createdAt: string
+  lastLoginAt: string
+}
+
+export interface UserProfile extends UserPublic {
+  /** 只有管理员查看时才有值；普通用户查看时是 null */
+  detail: UserDetail | null
+}
+
+// ---- 原始形状 ----
+
+export interface RawUserDetail {
+  student_id?: string | null
+  phone?: string | null
+  email?: string | null
+  allow_remind?: boolean | null
+  created_at?: string | null
+  last_login_at?: string | null
+}
+
+export interface RawUserProfile {
+  id?: number | null
+  name?: string | null
+  avatar_url?: string | null
+  role?: string | null
+  post_count?: number | null
+  can_message?: boolean | null
+  can_remind?: boolean | null
+  detail?: RawUserDetail | null
+}
+
+// =====================================================================
 // 评论模块已经在 v1.1（2026-10-02）里【被删除】了。
 //
 // 这里的 Comment / RawComment / CreateCommentPayload / CommentQuery 等类型

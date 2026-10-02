@@ -193,6 +193,16 @@ export const API_REFRESH_PATH = '/auth/refresh'
 export const API_LOGOUT_PATH = '/auth/logout'
 export const API_ME_PATH = '/users/me'
 
+/**
+ * 用户资源路径（U6 查看发帖人信息）。
+ * 注意和 API_ME_PATH 的区别：`/users/me` 是"我自己"，`/users/{id}` 是"看别人"。
+ */
+export const API_USERS_PATH = '/users'
+
+export function userPath(userId: number | string): string {
+  return `${API_USERS_PATH}/${userId}`
+}
+
 // ⚠️⚠️ 这个和上面的 API_LOGIN_PATH 完全不是一回事，千万别混用：
 //    ROUTE_LOGIN    = 浏览器地址栏里的【前端页面】路径，用来跳转、判断"现在是不是登录页"
 //    API_LOGIN_PATH = 发给后端的【接口】地址，用来发登录请求
@@ -356,10 +366,141 @@ export const POST_QUERY_PARAMS = {
 export const ROUTE_HOME = '/'
 export const ROUTE_MY_POSTS = '/my-posts'
 export const ROUTE_PUBLISH = '/publish'
+export const ROUTE_MESSAGES = '/messages'
 export const ROUTE_ADMIN_ITEMS = '/admin/items'
 
 export function itemDetailPath(id: number | string): string {
   return `/items/${id}`
+}
+
+/** 某个人的私信聊天页（M3 私信记录） */
+export function messageChatPath(peerId: number | string): string {
+  return `${ROUTE_MESSAGES}/${peerId}`
+}
+
+// ────────────────────────────────────────────────
+// 15. 消息模块（v1.1 文档第 6 章 M1~M5）
+// ────────────────────────────────────────────────
+/**
+ * ⚠️ v1.1 把消息模块**重新编号**了，照 v1.0 的编号写代码会调错接口：
+ *
+ *   v1.0                        v1.1
+ *   M1 未读数                   M1 未读私信数（返回体从 {total,private,comment} 变成 {total}）
+ *   M2 我的消息                 M2 我的消息（去掉 kind 参数）
+ *   M3 私信会话列表   ← 删除
+ *   M4 私信记录                 M3 私信记录（改游标分页）
+ *   M5 发送私信                 M4 发送私信（新增 remind）
+ *   M6 标记已读                 M5 标记已读（{kind:"all"} 改 {all:true}）
+ *
+ * v1.1 还删掉了消息的 `kind` 字段（不再分 private / comment）——
+ * 因为评论模块整个没了，消息就只剩私信一种。
+ */
+export const API_MESSAGES_PATH = '/messages'
+export const API_UNREAD_COUNT_PATH = '/messages/unread-count'
+export const API_MESSAGES_READ_PATH = '/messages/read'
+
+/**
+ * M3 私信记录的路径。
+ * 注意 M3 既是"某人的聊天记录"，也是"进入聊天页"的入口 —— v1.1 删掉了会话列表接口，
+ * 所以界面上"我能和谁聊"这件事只能靠 M2 的消息列表自己归并出来。
+ */
+export function conversationPath(peerId: number | string): string {
+  return `${API_MESSAGES_PATH}/conversations/${peerId}`
+}
+
+/** M2 的查询参数名（v1.1：box / is_read / page / page_size，**没有 kind**） */
+export const MESSAGE_QUERY_PARAMS = {
+  box: 'box',
+  isRead: 'is_read',
+  page: 'page',
+  pageSize: 'page_size',
+} as const
+
+/** M3 的查询参数名（v1.1：游标分页，不是 page/page_size） */
+export const CONVERSATION_QUERY_PARAMS = {
+  beforeId: 'before_id',
+  limit: 'limit',
+  markRead: 'mark_read',
+} as const
+
+/**
+ * M3 的默认条数。契约写"`limit` 默认 20，最大 50"。
+ * 所以这里放两个常量，翻页时用 limit，并且绝不传超过 50 的值。
+ */
+export const MESSAGE_PAGE_SIZE_DEFAULT = 20
+export const MESSAGE_PAGE_SIZE_MAX = 50
+
+/** 私信内容长度。契约 M4 没写上限，我们按经验给一个前端兜底（和有赞的 500 字一致） */
+export const MESSAGE_CONTENT_MAX = 500
+
+/** M4 发送私信时，是否请求"短信 / 邮件提醒对方" */
+export const MESSAGE_REMIND_FIELD = 'remind'
+
+/** M5 标记已读的三种用法对应的字段名（优先级 ids > peer_id > all） */
+export const MESSAGE_READ_KEYS = {
+  ids: 'ids',
+  peerId: 'peer_id',
+  all: 'all',
+} as const
+
+/**
+ * M4 返回体里 remind 的 status / reason 取值（v1.1 文档有完整表格）。
+ *
+ * 为什么要集中放这里？
+ *   因为界面上要把它翻译成给用户看的话（"已短信提醒对方" / "对方关闭了提醒"），
+ *   而 reason 一共有 6 种组合。散在组件里写 switch 很容易漏一种。
+ */
+export const REMIND_STATUS = {
+  SENT: 'sent',
+  SKIPPED: 'skipped',
+  FAILED: 'failed',
+} as const
+
+export const REMIND_REASON = {
+  NOT_REQUESTED: 'not_requested',
+  NO_CONTACT: 'no_contact',
+  DISABLED: 'disabled',
+  RATE_LIMITED: 'rate_limited',
+  PROVIDER_ERROR: 'provider_error',
+} as const
+
+/**
+ * 把 M4 的 remind 结果翻译成一句给用户看的话。
+ *
+ * 契约原文的表：
+ *   sent    / null            已提醒；channel 为实际使用的渠道
+ *   skipped / not_requested   请求里没有要求提醒
+ *   skipped / no_contact      对方没有绑定手机号和邮箱
+ *   skipped / disabled        对方关闭了提醒（allow_remind=false）
+ *   skipped / rate_limited    触发频率限制
+ *   failed  / provider_error  短信 / 邮件服务商发送失败
+ *
+ * ⚠️ 关键：**提醒失败不影响私信本身**（契约原文），
+ *    所以这个函数只用来提示，绝不能被当成"发送失败"。
+ */
+export function describeRemind(
+  status: string | null | undefined,
+  reason: string | null | undefined,
+  channel: string | null | undefined,
+): string {
+  if (status === REMIND_STATUS.SENT) {
+    return channel === 'sms' ? '已通过短信提醒对方' : '已通过邮件提醒对方'
+  }
+  if (status === REMIND_STATUS.FAILED) return '私信已发送，但提醒失败了'
+
+  // 剩下都是 skipped：分情况说清楚原因，用户才知道是不是要换个方式
+  switch (reason) {
+    case REMIND_REASON.NOT_REQUESTED:
+      return '私信已发送'
+    case REMIND_REASON.NO_CONTACT:
+      return '私信已发送（对方没绑定手机号或邮箱，无法提醒）'
+    case REMIND_REASON.DISABLED:
+      return '私信已发送（对方关闭了提醒）'
+    case REMIND_REASON.RATE_LIMITED:
+      return '私信已发送（提醒太频繁，本次未提醒）'
+    default:
+      return '私信已发送'
+  }
 }
 
 // ────────────────────────────────────────────────

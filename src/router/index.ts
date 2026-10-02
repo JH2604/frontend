@@ -39,6 +39,21 @@ const router = createRouter({
           name: 'publish',
           component: () => import('@/views/user/Publish.vue'),
         },
+        // 消息中心（v1.1 契约 M1~M5）。
+        // 路径注意：ROUTE_MESSAGES = '/messages'，
+        // 而 messages/:peerId 会匹配成 '/messages/1002'。
+        // vue-router 里静态段（'messages'）比动态段（':id'）优先级高，
+        // 所以这两条不会和 items/:id 冲突（前缀都不一样）。
+        {
+          path: 'messages',
+          name: 'messages',
+          component: () => import('@/views/user/Messages.vue'),
+        },
+        {
+          path: 'messages/:peerId',
+          name: 'conversation',
+          component: () => import('@/views/user/Conversation.vue'),
+        },
       ],
     },
 

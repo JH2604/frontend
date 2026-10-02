@@ -104,8 +104,8 @@ function toPostRef(
   return { id: raw.id ?? 0, title: raw.title ?? '' }
 }
 
-/** M2 列表项 */
-function toMessageBrief(raw: RawMessageBrief): MessageBrief {
+/** M2 列表项（导出是为了让沙箱测试能直接验转换层） */
+export function toMessageBrief(raw: RawMessageBrief): MessageBrief {
   return {
     id: raw.id ?? 0,
     direction: toDirection(raw.direction),
@@ -118,8 +118,8 @@ function toMessageBrief(raw: RawMessageBrief): MessageBrief {
   }
 }
 
-/** M3 / M4 里的单条消息（没有 peer） */
-function toChatMessage(raw: RawChatMessage): ChatMessage {
+/** M3 / M4 里的单条消息（没有 peer）。导出原因同 toMessageBrief */
+export function toChatMessage(raw: RawChatMessage): ChatMessage {
   return {
     id: raw.id ?? 0,
     direction: toDirection(raw.direction),
@@ -130,7 +130,7 @@ function toChatMessage(raw: RawChatMessage): ChatMessage {
   }
 }
 
-function toConversation(raw: RawConversation): Conversation {
+export function toConversation(raw: RawConversation): Conversation {
   return {
     peer: toAuthor(raw.peer),
     // fail-closed：后端没给 can_remind 就当"不能提醒"，绝不默认放开
@@ -140,7 +140,7 @@ function toConversation(raw: RawConversation): Conversation {
   }
 }
 
-function toRemindResult(raw: RawRemindResult | null | undefined): RemindResult {
+export function toRemindResult(raw: RawRemindResult | null | undefined): RemindResult {
   return {
     status: raw?.status ?? '',
     channel: raw?.channel ?? null,
@@ -162,7 +162,7 @@ function toSendMessageResult(raw: RawSendMessage | null | undefined): SendMessag
 // ---------------------------------------------------------------------
 
 /** M2 查询参数：驼峰 -> 下划线。空值直接不发（不发 = 不筛选） */
-function toMessageQueryParams(params: MessageQuery): Record<string, unknown> {
+export function toMessageQueryParams(params: MessageQuery): Record<string, unknown> {
   const q: Record<string, unknown> = {
     page: params.page,
     page_size: params.pageSize,
@@ -178,7 +178,7 @@ function toMessageQueryParams(params: MessageQuery): Record<string, unknown> {
 }
 
 /** M3 查询参数：游标分页 */
-function toConversationParams(params: ConversationQuery): Record<string, unknown> {
+export function toConversationParams(params: ConversationQuery): Record<string, unknown> {
   const q: Record<string, unknown> = {
     // 契约写 limit 默认 20、最大 50，超了就自己夹住，别让后端去拒绝
     [CONVERSATION_QUERY_PARAMS.limit]: Math.min(
@@ -205,7 +205,7 @@ function toSendBody(payload: SendMessagePayload): Record<string, unknown> {
 }
 
 /** M5 请求体：三种用法任选其一，优先级 ids > peer_id > all */
-function toMarkReadBody(payload: MarkReadPayload): Record<string, unknown> {
+export function toMarkReadBody(payload: MarkReadPayload): Record<string, unknown> {
   if (payload.ids && payload.ids.length > 0) {
     return { [MESSAGE_READ_KEYS.ids]: payload.ids }
   }

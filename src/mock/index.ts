@@ -537,6 +537,25 @@ function postTitle(postId: number): string {
   return posts.find((p) => p.id === postId)?.title ?? ''
 }
 
+/**
+ * 仅供沙箱测试使用：把假后端的消息原始状态直接读出来。
+ *
+ * ⚠️ 这个名字前缀是 __debug，意思是**业务代码不要用它**。
+ *    它的存在是为了让测试能断言"假后端到底存了什么"，
+ *    而不是只能通过 API 的返回值间接猜。
+ *    C++ 类比：单元测试里的 friend 声明 —— 只给测试开后门，不破坏封装语义。
+ */
+export function __debugMessages(): ReadonlyArray<{
+  id: number
+  sender_id: number
+  receiver_id: number
+  content: string
+  is_read: boolean
+  reminded: boolean
+}> {
+  return messages.map((m) => ({ ...m }))
+}
+
 // ===== M1 未读私信数 =====
 /**
  * 只数"我收到的且未读"的。

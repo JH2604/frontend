@@ -281,3 +281,45 @@ export function readRole(input: unknown): RoleValue | undefined {
   if (role === Role.STUDENT) return Role.STUDENT
   return undefined
 }
+
+// ────────────────────────────────────────────────
+// 11. 文件上传（文档 F1）
+// ────────────────────────────────────────────────
+export const UPLOAD_FILE_FIELD = 'file'
+export const UPLOAD_USAGE_FIELD = 'usage'
+
+/** usage 的取值：avatar 头像（≤2MB）/ post 帖子图片（≤5MB） */
+export const UploadUsage = {
+  AVATAR: 'avatar',
+  POST: 'post',
+} as const
+
+/** 帖子最多 9 张图（文档 F1 备注 + P3 的 images 说明） */
+export const POST_IMAGE_LIMIT = 9
+export const POST_IMAGE_MAX_MB = 5
+
+/** 标题 / 正文的长度限制（文档 P3） */
+export const POST_TITLE_MAX = 30
+export const POST_CONTENT_MAX = 1000
+
+// ────────────────────────────────────────────────
+// 12. 帖子字段名（我们内部驼峰 <-> 后端下划线）
+//     映射函数在 src/api/item.ts，这里只放常量方便对照。
+// ────────────────────────────────────────────────
+export const POST_QUERY_PARAMS = {
+  page: 'page',
+  pageSize: 'page_size',
+  sortBy: 'sort_by',
+} as const
+
+// ────────────────────────────────────────────────
+// 13. 前端页面路径（注意和上面的接口路径区分）
+// ────────────────────────────────────────────────
+export const ROUTE_HOME = '/'
+export const ROUTE_MY_POSTS = '/my-posts'
+export const ROUTE_PUBLISH = '/publish'
+export const ROUTE_ADMIN_ITEMS = '/admin/items'
+
+export function itemDetailPath(id: number | string): string {
+  return `/items/${id}`
+}

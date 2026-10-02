@@ -2,23 +2,21 @@
 import { RouterView, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { logoutApi } from '@/api/auth'
+import { ROUTE_ADMIN_ITEMS, ROUTE_LOGIN } from '@/utils/contract'
 
 const router = useRouter()
 const userStore = useUserStore()
 
-const menus = [
-  { path: '/admin/audit', title: '发布审核' },
-  { path: '/admin/claims', title: '认领审核' },
-  { path: '/admin/items', title: '物品管理' },
-]
+// 组长 10/02 的四条决定里去掉了"先审核后发布"和"分类"，
+// 所以管理端只剩一个入口了（原来有 发布审核 / 认领审核 / 物品管理 三个）。
+const menus = [{ path: ROUTE_ADMIN_ITEMS, title: '帖子管理' }]
 
 const logout = async () => {
   await logoutApi().catch(() => undefined)
   userStore.logout()
-  router.push('/login')
+  router.push(ROUTE_LOGIN)
 }
 </script>
-
 
 <template>
   <el-container class="layout">

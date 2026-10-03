@@ -2,6 +2,7 @@
 
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useUserStore } from '@/stores/user'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { Item, ItemStatus, UserProfile } from '@/types/api'
 import { deleteItem, getItemDetail, updateItemStatus } from '@/api/item'
@@ -12,7 +13,7 @@ import { formatDateTime, fromNow } from '@/utils/format'
 
 const route = useRoute()
 const router = useRouter()
-
+const userStore = useUserStore()
 const loading = ref(false)
 const detail = ref<Item | null>(null)
 
@@ -92,23 +93,46 @@ async function handleToggleStatus() {
     // 错误提示已经在 utils/request.ts 的拦截器里统一弹过了
   }
 }
-
 async function handleDelete() {
-  if (!detail.value) return
+  if(!detail.value) return
+  const title = detail.value.title
+  const id = detail.value.id
+  const adminDeletingOthers = userStore.isAdmin && !detail.value.isMine
+  let reason: string | undefined
 
-  try {
-    await ElMessageBox.confirm(
-      `确定要删除「${detail.value.title}」吗？删掉就找不回来了。`,
-      '删除确认',
-      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
-    )
+  try{
+    if(adminDeletingOthers){
+      const {value} = await ElMessageBox.prompt(
+        `确定要删除「${title}」吗？删掉就找不回来了。\n\n请输入删除理由（可选）`,
+        '删除确认',
+        {
+          inputPlaceholder: '此处输入删除理由（可选）',
+          inputValidator:(value) => (value&&value.length > 200 ? '删除理由不能超过 200 个字符' : true),
+          confirmButtonText: '删除',
+          cancelButtonText: '取消',
+        },
+      )
+      const trimmed = (value ?? '').trim()
+      reason = trimmed || undefined
+    } else {
+      await ElMessageBox.confirm(
+        `确定要删除「${title}」吗？删掉就找不回来了。`,
+        '删除确认',
+        { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
+      )
+    }
   } catch {
     return
   }
+
   try{
-    await deleteItem(detail.value.id)
+    await deleteItem(id, reason)
     ElMessage.success('已删除')
-    router.push(ROUTE_HOME)
+    if (window.history.length > 1) {
+      router.back()
+    } else {
+      router.push(ROUTE_HOME)
+    }
   } catch{
     // 错误提示已经在 utils/request.ts 的拦截器里统一弹过了，此处省略弹错误。
   }

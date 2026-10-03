@@ -1,56 +1,3 @@
-// =====================================================================
-// 假后端（"后端还没好时先顶上"的那套假数据 + 假接口）
-// =====================================================================
-//
-// 【它在哪里】
-// api/*.ts 里每个函数都是这个结构：
-//
-// export async function getItemList(params) {
-// if (USE_MOCK) {                    <- 就这一个开关
-// await delay()
-// return mockGetItemList(params)   <- 走本文件（假后端）
-// }
-// return http(...)                   <- 走真后端
-// }
-//
-// 所以本文件扮演的角色就是"一个假的后端服务"。
-// 切换方式：把下面的 USE_MOCK 改成 false，全项目就切到真后端，页面代码一行不用改。
-//
-// 【为什么要这么设计】
-// 前后端可以并行开发。前端不必等后端把接口写好才能做页面。
-//
-// 【本文件里有两类东西，看名字能分清】
-// ① 种子数据（假数据的原始内容）
-// posts         帖子（P1~P5 用）
-// messages      消息（M1~M5 用）
-// meProfile     当前登录用户自己的信息（U1~U5 用）
-//
-// ② mockXxx 函数（假接口，名字和 api/ 里的真函数一一对应）
-// mockGetItemList / mockGetItemDetail / mockCreateItem / ...
-// mockGetUnreadCount / mockGetMessageList / mockSendMessage / ...
-// mockGetMe / mockUpdateMe / mockChangePassword / ...
-//
-// 【⚠️ 三条"假数据必须遵守"的规矩（都是踩过坑总结的）】
-//
-// ① 假数据要写成【下划线的原始形状】（post_id、is_read、created_at……）
-// 因为这样 api/ 里的"字段映射"代码在 USE_MOCK=true 时也会被真跑一遍。
-// 如果假数据直接写成驼峰，那映射代码要等到切真后端才第一次执行 —— 很容易翻车。
-//
-// ② 和"身份"有关的字段【不许写死】，要按"当前是谁在看"现算
-// 比如 can_delete / is_mine / can_change_status。
-// 写死 can_delete: false 的后果：管理员登录后看到的也是"不能删"，
-// 而真后端这时应该给 true —— 等于用假数据把真后端的行为盖住了。
-//
-// ③ 假后端是【有状态】的，而且读操作也会改状态
-// 比如 mockGetConversation 的 mark_read 默认 true，
-// 调一次就把"我收到的"那几条标成已读了。
-// 写测试时不能到处假设"某条还是未读"。
-//
-// 【前端名词】
-// Mock      假数据 / 假接口
-// 种子数据（seed）  一开始就摆在那里的初始数据
-// USE_MOCK  总开关（就在下面几十行）
-// =====================================================================
 import {ElMessage} from 'element-plus'
 import type {
   ItemQuery,
@@ -76,8 +23,6 @@ import type {
   SendMessagePayload,
 } from '@/types/api'
 
-// ===== 总开关 =====
-// 后端接口通了以后，把这里改成 false，全项目就切到真实接口
 export const USE_MOCK = true
 
 // 模拟网络延迟，让 loading 动画看得见
@@ -88,10 +33,6 @@ export function mockFail (message: string): never {
   ElMessage.error(message)
   mockFail(message)
 }
-// ===== 假登录 / 假注册（文档 A1/A2）=====
-// 契约入参：{ student_id, password }（注册时还要 role）
-// 契约出参：{ access_token, refresh_token, user: { name, role, ... } }
-// 这里模拟成"名字来自实名库"的效果：你输学号，界面上显示的是后端查出来的名字。
 export type MockLoginParams = {
   studentId: string
   password: string
@@ -105,9 +46,6 @@ export function mockLogin(data: MockLoginParams) {
     refreshToken: `mock-refresh-${Date.now()}`,
     role: (isAdmin ? 'admin' : 'student') as 'student' | 'admin',
     username: isAdmin ? '管理员' : data.studentId,
-    // 假登录的 id 和 MOCK_ME_ID 保持一致，
-    // 这样"我发的帖子 / 我发的评论"在 mock 模式下才认得出是自己。
-    // C++ 类比：假的 session 里也得塞上同一个 uid，否则权限判断对不上号。
     userId: isAdmin ? 9001 : MOCK_ME_ID,
   }
 }
@@ -115,18 +53,6 @@ export function mockLogin(data: MockLoginParams) {
 export function mockRegister(data: MockLoginParams) {
   return mockLogin(data)
 }
-
-// =====================================================================
-// 假数据（严格按接口文档的【原始形状】写，下划线命名）
-//
-// ⚠️ 这一点很重要：假数据故意做成"后端返回的原样"，
-//    这样 src/api/item.ts 里的字段转换代码在 USE_MOCK = true 时也会被真正跑一遍。
-//    如果假数据直接写成驼峰，等切到真后端时转换层才第一次执行，很容易翻车。
-//
-// 📌 2026-10-02 v1.1 契约变更后，这里【没有评论假数据了】：
-//    评论模块 C1~C3 被整个删除，comment_count 字段也从 P1/P2 消失。
-//    别照着旧文档把评论假数据加回来。见 types/api.ts 末尾那段说明。
-// =====================================================================
 
 /** 假装当前登录用户的 id，用来实现 mine=true（我发布的） */
 export const MOCK_ME_ID = 1001
@@ -293,15 +219,6 @@ export function mockGetItemList(query: ItemQuery): RawPostPage {
   }
 }
 
-/**
- * 假后端自己算"当前用户能不能删这个帖子"（契约 P4：本人【或管理员】）。
- *
- * ⚠️ 为什么要按 viewerIsAdmin 现算，而不是把 can_delete 写死在种子数据里？
- *    写死 = 用假数据把真后端的行为盖住：
- *      - 管理员登录后看到的还是 false（真后端这时会给 true）
- *      - "管理员能不能删别人的帖子"这条权限永远测不出来
- *    这是上一轮（评论模块）实测踩到的坑，这里保持同样的做法。
- */
 function postCanDeleteFor(post: RawPost, viewerIsAdmin = false): boolean {
   if (viewerIsAdmin) return true
   return post.author?.id === MOCK_ME_ID
@@ -318,9 +235,6 @@ export function mockGetItemDetail(id: number, viewerIsAdmin = false): RawPost {
     ...found,
     is_mine: found.author?.id === MOCK_ME_ID,
     can_delete: postCanDeleteFor(found, viewerIsAdmin),
-    // 契约 P2：can_change_status「仅本人为 true」。
-    // 契约第 7 章权限表还写明"修改他人帖子的状态 → 管理员也 ✗"，
-    // 所以这里【不看 viewerIsAdmin】，只认作者本人。
     can_change_status: found.author?.id === MOCK_ME_ID,
   }
 }
@@ -349,9 +263,6 @@ export function mockCreateItem(payload: CreateItemPayload): RawPost {
   return created
 }
 
-// ===== P5 修改状态，仅发帖人本人 =====
-// v1.1 的返回体只有三个字段：{ id, status, closed_at }
-// （v1.0 返回的是完整帖子详情，已作废 —— 页面也因此必须重新拉一次 P2）
 export function mockUpdateItemStatus(id: number, status: ItemStatus): RawStatusPatch {
   const found = posts.find((p) => p.id === id)
   if (!found) mockFail('帖子不存在或已删除')
@@ -368,9 +279,6 @@ export function mockDeleteItem(id: number): void {
   const idx = posts.findIndex((p) => p.id === id)
   if (idx >= 0) posts.splice(idx, 1)
 }
-// ===== F1 文件上传 =====
-// 假实现：不发任何请求，直接返回一个"看起来像真的"的上传结果。
-// 真后端返回的是 { url, width, height, size }（文档 F1）。
 export function mockUploadFile(file: { name?: string }): {
   url: string
   width: number
@@ -386,24 +294,6 @@ export function mockUploadFile(file: { name?: string }): {
     size: 123456,
   }
 }
-
-
-
-// =====================================================================
-// 消息假数据（v1.1 文档第 6 章，M1~M5）
-//
-// ⚠️ 同样按契约的【原始形状】写：direction / peer / is_read / reminded / created_at
-//    这样 src/api/message.ts 里的字段转换代码在 mock 模式下也会被真跑一遍。
-//
-// ⚠️ v1.1 删掉了 `kind` 字段（不再分 private / comment）。
-//    如果你的记忆里还有 kind，那是 v1.0，别加回来。
-//
-// 【为什么假数据存在"原始数组"里，而不是提前算好 peer】
-//   peer 是"对方"，而"对方是谁"取决于**看的人是谁**：
-//   我发出的消息，对方是接收人；我收到的消息，对方是发送人。
-//   所以 peer 必须在查询的时候现算（见 toMessageBrief），
-//   不能存成一个固定字段 —— 这和 can_delete 不能写死是同一个道理。
-// =====================================================================
 
 /** 假数据的 id 段位（和帖子 1xx、评论曾经用过的 9xxx 都错开） */
 const MSG_IDS = {
@@ -572,12 +462,6 @@ function byCreatedDesc(a: MockMessageRecord, b: MockMessageRecord): number {
   return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
 }
 
-/**
- * 把一条记录转成契约 M2 的形状。
- *
- * ⚠️ 这里就是"peer 必须现算"的地方：当前用户视角下，
- *    我发出的 → peer 是接收人；我收到的 → peer 是发送人。
- */
 function toRawBrief(m: MockMessageRecord, viewerId: number): RawMessageBrief {
   const isSent = m.sender_id === viewerId
   return {
@@ -597,14 +481,6 @@ function postTitle(postId: number): string {
   return posts.find((p) => p.id === postId)?.title ?? ''
 }
 
-/**
- * 仅供沙箱测试使用：把假后端的消息原始状态直接读出来。
- *
- * ⚠️ 这个名字前缀是 __debug，意思是**业务代码不要用它**。
- *    它的存在是为了让测试能断言"假后端到底存了什么"，
- *    而不是只能通过 API 的返回值间接猜。
- *    C++ 类比：单元测试里的 friend 声明 —— 只给测试开后门，不破坏封装语义。
- */
 export function __debugMessages(): ReadonlyArray<{
   id: number
   sender_id: number
@@ -617,15 +493,7 @@ export function __debugMessages(): ReadonlyArray<{
 }
 
 // ===== M1 未读私信数 =====
-/**
- * 只数"我收到的且未读"的。
- *
- * ⚠️ 为什么不数我发出的？
- *    因为"未读"是**收件人的**状态。我发出的消息里 is_read 表示"对方读没读"，
- *    那不是我的未读。契约 M1 说的是"未读私信数（首页小红点）"，
- *    小红点是提醒"有人给你发消息你还没看"，所以只数收到的。
- *    这是本模块最容易搞错的一处。
- */
+
 export function mockGetUnreadCount(viewerId = MOCK_ME_ID): number {
   const viewer = viewerId || MOCK_ME_ID
   return messages.filter((m) => m.receiver_id === viewer && !m.is_read).length
@@ -678,13 +546,9 @@ export function mockGetConversation(
   // 游标：只取 before_id 之前的
   const filtered = query.beforeId ? both.filter((m) => m.id < query.beforeId!) : both
 
-  // ⚠️ 契约原文：list 按时间【正序】排列，方便直接渲染聊天气泡。
-  //    注意和 M2 相反（M2 是新的在前）。这是文档明确写的，别"统一"掉。
   const ascending = filtered.slice().sort((a, b) => a.id - b.id)
 
   const limit = Math.min(query.limit ?? 20, 50)
-  // 游标分页取的是"最新的 limit 条"（然后仍然正序返回），
-  // 所以从尾部往前切，而不是从头切
   const hasMore = ascending.length > limit
   const pageItems = hasMore ? ascending.slice(ascending.length - limit) : ascending
 
@@ -695,8 +559,6 @@ export function mockGetConversation(
     }
   }
 
-  // ⚠️ can_remind 的含义（契约）：对方绑了手机/邮箱 且 没关提醒。
-  //    假实现里给一个"王老师没绑手机"的例外，方便演示"开关不显示"的情况。
   const canRemind = peerId !== MOCK_PEER_ADMIN
 
   return {
@@ -721,8 +583,6 @@ export function mockSendMessage(
 ): RawSendMessage {
   const sender = senderId || MOCK_ME_ID
 
-  // 假后端也会像真后端一样校验一下"能不能私信自己"，
-  // 这样前端万一漏了判断，测试能发现（真后端会返回 40300）
   const selfSend = payload.receiverId === sender
 
   const created: MockMessageRecord = {
@@ -795,16 +655,7 @@ export function mockMarkRead(payload: MarkReadPayload, viewerId = MOCK_ME_ID): R
 }
 
 // ===== U6 查看发帖人信息 =====
-/**
- * 假实现要模拟两件真后端会做的事：
- *   1. **按查看者角色**决定给不给 detail（契约：普通用户看不到学号/手机/邮箱）
- *   2. can_message / can_remind 现算（不能私信自己）
- *
- * ⚠️ 第 1 点是契约里少见的"后端控制字段可见性"设计，原话是：
- *    「同一个接口按查看者角色返回不同字段，由后端控制，不靠前端隐藏」
- *    所以假后端也必须真的**不返回** detail，而不是返回了让前端去藏 ——
- *    否则前端"隐藏"这件事根本没被测到。
- */
+
 export function mockGetUserProfile(
   userId: number,
   viewerId = MOCK_ME_ID,
@@ -848,19 +699,6 @@ export function mockGetUserProfile(
   }
 }
 
-// =====================================================================
-// 用户模块假数据（v1.1 文档第 3 章，U1~U5 + U7）
-//
-// ⚠️ U1（我自己）和 U6（看别人）是**两个不同的接口、两份不同的数据**：
-//    U1 返回手机号/邮箱的【完整值】（本人视角），有 theme、created_at
-//    U6 返回的东西由后端按角色遮蔽（普通用户 detail=null）
-//    共用一个变量、共用一个类型，将来后端一改遮蔽规则就会两边一起错。
-//    C++ 类比：两个都叫 User 的 struct，一个含敏感字段、一个不含。
-//
-// ⚠️ 这个文件里的 meProfile 是**可变的**（U2/U5 会改它），
-//    这样"改完资料再刷新页面，值还在"这件事在 mock 下也能演示。
-// =====================================================================
-
 /** 当前登录用户（U1）的假数据。U2 改资料、U5 绑联系方式都会改它。 */
 const meProfile: RawUserMe = {
   id: MOCK_ME_ID,
@@ -876,14 +714,6 @@ const meProfile: RawUserMe = {
   created_at: '2026-09-01T10:00:00+08:00',
 }
 
-/**
- * 假后端记下"给谁发过验证码"。
- *
- * 为什么需要它？因为契约 U5 明确要求
- * 「`target` 必须和 U4 发送验证码时一致」——
- * 假后端如果完全不校验，前端漏了这个约束就测不出来。
- * 真后端会校验，所以假后端也得模拟。
- */
 let pendingCode: { channel: string; target: string; code: string } | null = null
 
 /** U1 获取当前用户信息 */
@@ -891,10 +721,6 @@ export function mockGetMe(): RawUserMe {
   return { ...meProfile }
 }
 
-/**
- * U2 修改个人资料。
- * 契约：只改传了的字段，没传的保持不变；name / student_id / role 不允许改。
- */
 export function mockUpdateMe(payload: {
   avatarUrl?: string
   theme?: string
@@ -903,26 +729,11 @@ export function mockUpdateMe(payload: {
   if (payload.avatarUrl !== undefined) meProfile.avatar_url = payload.avatarUrl
   if (payload.theme !== undefined) meProfile.theme = payload.theme
   if (payload.allowRemind !== undefined) meProfile.allow_remind = payload.allowRemind
-  // 注意：故意不处理 name / student_id / role —— 契约说"传了会被忽略"，
-  // 假后端也照这个行为做（而不是报错），这样前端拿假数据测时行为一致。
   return { ...meProfile }
 }
 
-/**
- * 假后端里记着的当前密码。
- * ⚠️ 用 let 而不是 const：改了密码之后它要跟着变，
- *    否则第二次改密码时新密码会被当成"原密码"从而判错。
- */
 let MOCK_CURRENT_PASSWORD = 'abc12345'
 
-/**
- * U3 修改密码。
- *
- * 假后端要做两件真后端会做的事：
- *   1. 校验原密码（契约：400 / 40002 原密码错误）
- *   2. 校验新密码格式（契约：400 / 40000 新密码格式不合法）
- * 这样界面上"原密码错了要给红字"这条才测得到。
- */
 export function mockChangePassword(payload: {
   oldPassword: string
   newPassword: string
@@ -943,12 +754,6 @@ function MOCK_PASSWORD_OK(pwd: string): boolean {
   return /[A-Za-z]/.test(pwd) && /\d/.test(pwd)
 }
 
-/**
- * U4 发送验证码。
- *
- * 假实现：把 target 记下来，并且**固定用 123456 作验证码**（方便你在界面上试）。
- * 真实项目里验证码当然不会告诉前端 —— 这里只是个便于演示的假后端。
- */
 export function mockSendCode(payload: { channel: string; target: string }): void {
   if (!payload.target) mockFail('手机号或邮箱不能为空')
   // 简单的格式校验，模拟契约里的 400 / 40000
@@ -962,14 +767,6 @@ export function mockSendCode(payload: { channel: string; target: string }): void
   pendingCode = { channel: payload.channel, target: payload.target, code: '123456' }
 }
 
-/**
- * U5 绑定 / 修改手机号或邮箱。
- *
- * 假后端照契约校验三件事：
- *   1. 必须先发过验证码（U4）
- *   2. target 必须和发验证码时一致
- *   3. 验证码必须对
- */
 export function mockBindContact(payload: {
   channel: string
   target: string
@@ -993,12 +790,6 @@ export function mockBindContact(payload: {
   return { phone: meProfile.phone ?? null, email: meProfile.email ?? null }
 }
 
-/**
- * U7 管理员列表（联系管理员）。
- *
- * 假数据里放两个管理员，其中一个**没有公开邮箱** ——
- * 用来演示"没邮箱时只显示私信按钮"的分支（前端不该给一个点了没用的 mailto）。
- */
 export function mockListAdmins(): RawAdminContact[] {
   return [
     {

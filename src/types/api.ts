@@ -1,46 +1,5 @@
-// =====================================================================
-// 接口协议的类型定义（"这个接口返回的东西长什么样"）
-//
-// 【它在哪一层】
-//   最底层、最纯粹的声明文件。**运行时这些类型完全不存在** ——
-//   编译成 JS 之后，interface / type 全部被删掉，一行都不剩。
-//   它们唯一的用途是：让你写错字段名时【编译期就报错】。
-//   C++ 类比：头文件里的 struct 声明。区别是这里的 struct 不占内存。
-//
-// 【谁在用】
-//   api/*.ts      每个映射函数的入参和返回值类型（最重度使用者）
-//   views/*.vue   页面里声明 ref 的类型，例如 ref<ItemBrief[]>([])
-//   mock/index.ts 假数据要符合 RawXxx 形状，写错字段会报错
-//
-// 【这个文件里有两类类型，一定要分清】
-//
-//   ① 前端内部形状（驼峰）
-//        ItemBrief / Item / MessageBrief / UserMe / UserProfile ...
-//        页面只用这些。
-//
-//   ② 后端原始形状（下划线，名字都以 Raw 开头）
-//        RawPost / RawMessageBrief / RawUserMe ...
-//        只有 api/*.ts 的映射函数用它们。
-//
-//   ⚠️ 这就是整个项目的核心约定：
-//      「内部一律驼峰，下划线只允许出现在 src/api/*.ts 里」
-//      页面永远见不到 created_at，只见到 createdAt。
-//      所以后端改字段名，只改 api 层的映射，页面一行都不用动。
-//
-// 【一个刻意的设计：RawXxx 的字段全都是可选的】
-//   interface RawPost { id?: number | null; title?: string | null; ... }
-//                      ^^^ 可选        ^^^^^^^ 还可能是 null
-//   为什么？因为我们【没法保证后端一定给】。这样定义，TS 会强制我们在
-//   映射函数里对每个字段都做兜底 —— 漏一个兜底就编译不过。
-//   C++ 类比：把结构体字段都设成"可能未初始化"，逼调用方检查，
-//   而不是给它一个看起来正常的脏值。
-// =====================================================================
-
 import type { ContactChannelValue, RoleValue } from '@/utils/contract'
 
-// ===== 统一返回体（文档 1.4）=====
-// 提示字段文档里叫 message，群里 10/1 拍板叫 msg，两个都留着可选，
-// 真正的取值逻辑在 src/utils/contract.ts 的 pickMessage()。
 export interface ApiResult<T = unknown> {
   code: number
   message?: string
@@ -48,8 +7,6 @@ export interface ApiResult<T = unknown> {
   data: T
 }
 
-// ===== 分页（文档 1.5）=====
-// 前端内部统一用 pageSize（驼峰），发给后端时在 api 层转成 page_size。
 export interface PageQuery {
   page: number
   pageSize: number
@@ -66,13 +23,6 @@ export interface PageResult<T> {
 /** 帖子类型：lost 失物（我丢了东西）/ found 招领（我捡到东西） */
 export type ItemType = 'lost' | 'found'
 
-/**
- * 帖子状态：open 进行中 / closed 已完结。
- * 界面上具体显示什么字，取决于帖子类型（v1.1 第 1.7 节）：
- *   失物帖 open=未找到，closed=已找到
- *   招领帖 open=待认领，closed=已认领
- * 文案表在 utils/contract.ts 的 STATUS_TEXT，由 StatusTag.vue 渲染。
- */
 export type ItemStatus = 'open' | 'closed'
 
 /** 主题偏好（文档 1.7） */
@@ -99,11 +49,6 @@ export interface Author {
 
 // ===== 帖子（我们内部用的驼峰形状）=====
 
-/**
- * 列表项（对应 P1）。
- * 列表接口不带完整正文和图片数组，只给"正文前 60 字"和"第一张图 + 张数"，
- * 这是为了列表能更快返回。所以列表项和详情是两个类型，不要混用。
- */
 export interface ItemBrief {
   id: number
   type: ItemType
@@ -118,10 +63,7 @@ export interface ItemBrief {
   status: ItemStatus
   author: Author
   createdAt: string
-  /**
-   * 标记为已找到 / 已认领的时间，进行中为 null（v1.1 新增的 P1 字段 closed_at）。
-   * 目前列表页不展示它，但契约里有，先接出来备用。
-   */
+
   closedAt: string | null
 }
 
@@ -142,33 +84,13 @@ export interface Item {
   isMine: boolean
   /** 后端算好的"能不能删"（本人或管理员），前端据此显示删除按钮 */
   canDelete: boolean
-  /**
-   * 能不能改状态（v1.1 新增的 P2 字段 can_change_status）。
-   *
-   * ⚠️ 这个字段和 isMine 看着像，但**不要用 isMine 代替它**：
-   *   契约第 7 章权限表写明"修改他人帖子的状态 → 管理员也不可以"，
-   *   所以它等价于 isMine。但**后端算出来的才权威** ——
-   *   万一以后放开"管理员也能改"，前端用 isMine 就漏了。
-   *   和 canDelete 一样，前端只管照着显示按钮。
-   */
+
   canChangeStatus: boolean
   createdAt: string
   /** 标记为已找到 / 已认领的时间，进行中为 null（v1.1 新增的 P2 字段 closed_at） */
   closedAt: string | null
 }
 
-/**
- * P5 修改状态的返回（v1.1 变更）。
- *
- * ⚠️ v1.0 返回的是【完整帖子详情】，v1.1 只返回这三个字段了：
- *   { "id": 501, "status": "closed", "closed_at": "2026-10-02T19:30:00+08:00" }
- *
- * 所以**不能**再拿它去走 toItem() —— 那会把标题、正文全变成空字符串，
- * 页面上会出现"改完状态标题没了"这种诡异现象。
- * 单独给它一个类型，诚实反映契约。
- *
- * 页面上的做法：改完状态后重新调 P2 拉一次详情（见 ItemDetail.vue）。
- */
 export interface StatusPatchResult {
   id: number
   status: ItemStatus
@@ -192,25 +114,9 @@ export interface ItemQuery extends PageQuery {
   /** true 时只返回当前用户发布的帖子 */
   mine?: boolean
   status?: ItemStatus | 'all'
-  /**
-   * 排序方向，按发布时间：desc 最新在前（默认）/ asc 最早在前。
-   *
-   * ⚠️ 这里**没有** sortBy 了：v1.1 把 P1 的 `sort_by` 参数整个移除，
-   * 同时 `comment_count` 字段也随评论模块一起被删。
-   * 别照着旧文档把 sort_by 加回来。
-   */
+
   order?: 'asc' | 'desc'
 }
-
-// =====================================================================
-// 以下是"后端返回的原始形状"（P1 / P2 的 JSON 原样，下划线命名）
-//
-// 为什么要单独定义一遍？
-//   后端用 created_at / cover_url / content_preview，我们内部用驼峰。
-//   与其把下划线命名扩散到所有页面，不如在 api 层做一次转换：
-//   页面永远只见到驼峰，转换只发生在 src/api/item.ts 一个文件里。
-//   好处：后端将来把 created_at 改名，只改一个映射函数，页面一行不用动。
-// =====================================================================
 
 export interface RawLocation {
   name?: string | null
@@ -266,24 +172,11 @@ export interface RawPostPage {
   page_size?: number | null
 }
 
-/**
- * P5 修改状态的原始返回（v1.1）。
- * 契约原文：{ "id": 501, "status": "closed", "closed_at": "2026-10-02T19:30:00+08:00" }
- */
 export interface RawStatusPatch {
   id?: number | null
   status?: string | null
   closed_at?: string | null
 }
-
-// =====================================================================
-// 消息模块（v1.1 文档第 6 章，M1~M5）
-//
-// v1.1 相比 v1.0 的三处结构性变化（写在这里免得又照旧文档写）：
-//   1. 删掉 `kind` 字段（不再分 private / comment）—— 评论模块整个没了
-//   2. 新增 `reminded` 字段（这条私信是否触发过短信 / 邮件提醒）
-//   3. 编号整体前移（旧 M4→M3、旧 M5→M4、旧 M6→M5），旧 M3 会话列表被删
-// =====================================================================
 
 /** 消息方向：sent 我发出的 / received 我收到的 */
 export type MessageDirection = 'sent' | 'received'
@@ -297,12 +190,6 @@ export interface MessagePostRef {
   title: string
 }
 
-/**
- * M2 消息列表项。
- *
- * ⚠️ `peer` 是"对方"：我发出的 → 接收人；我收到的 → 发送人。
- *    后端已经帮我们把方向算好了，前端不要自己去猜。
- */
 export interface MessageBrief {
   id: number
   direction: MessageDirection
@@ -324,13 +211,6 @@ export interface MessageQuery extends PageQuery {
   isRead?: boolean
 }
 
-/**
- * M3 私信记录里的一条消息。
- *
- * 和 MessageBrief 的区别：**没有 peer**。
- * 因为整条会话都是和同一个人聊的，对方信息在响应体的 `peer` 里给一次就够了，
- * 每条都重复带一遍是浪费带宽。契约就是这么设计的，所以这里分成两个类型。
- */
 export interface ChatMessage {
   id: number
   direction: MessageDirection
@@ -340,16 +220,6 @@ export interface ChatMessage {
   createdAt: string
 }
 
-/**
- * M3 私信记录的完整返回。
- *
- * ⚠️ M3 用的是**游标分页**（`before_id` + `has_more`），不是 page / page_size。
- *    为什么聊天记录要用游标？因为聊天是"不断往上追加"的：
- *    用页码的话，你翻到第 2 页时如果来了新消息，整个页码都会错位，
- *    出现"翻页看到重复消息"。游标（记住最后一条的 id）就没这个问题。
- *    C++ 类比：用 `list::iterator` 而不是 `vector::operator[]` 的下标 ——
- *    容器变了，迭代器仍然指向同一条数据。
- */
 export interface Conversation {
   peer: Author
   /** 能否提醒对方（对方绑了手机/邮箱 且 没关提醒）。决定界面上显不显示"提醒对方"开关 */
@@ -375,14 +245,6 @@ export interface RemindResult {
   reason: string | null
 }
 
-/**
- * M4 发送私信的结果。
- *
- * ⚠️ v1.1 的返回体是**嵌套**的，和 v1.0 不一样：
- *   v1.0：data 直接就是消息对象
- *   v1.1：data = { message: {...}, remind: { status, channel, reason } }
- * 所以映射的时候要往里剥一层，别照着旧文档写。
- */
 export interface SendMessageResult {
   message: ChatMessage
   remind: RemindResult
@@ -472,13 +334,6 @@ export interface RawMarkRead {
   unread_total?: number | null
 }
 
-// =====================================================================
-// 用户信息（U6，v1.1 文档 3 章）
-//
-// 契约特别强调："同一个接口按查看者角色返回不同字段，由后端控制，不靠前端隐藏"。
-// 所以前端的做法是：**只渲染后端给了的字段**，不要自己拿 role 去猜该藏什么。
-// =====================================================================
-
 /** U6 返回的公开信息（普通用户和管理员都能看到） */
 export interface UserPublic {
   id: number
@@ -529,20 +384,6 @@ export interface RawUserProfile {
   detail?: RawUserDetail | null
 }
 
-// =====================================================================
-// 我的信息（U1）+ 个人资料修改（U2）+ 密码（U3）+ 联系方式（U4/U5）+ 管理员列表（U7）
-// =====================================================================
-
-/**
- * U1 `GET /users/me` —— **当前登录用户自己**的完整信息。
- *
- * ⚠️ 它和 U6 的 `UserProfile` 长得像，但**不是一回事**，别合并：
- *   U1：本人的信息，手机号/邮箱是**完整值**，有 theme、created_at，没有 can_message
- *   U6：看**别人**的信息，contact 由后端按角色遮蔽，有 can_message / detail
- *   混用的话，U6 的映射函数会把"本人完整手机号"当成"别人的公开信息"处理，
- *   将来后端一改遮蔽规则，两边一起错。
- *   C++ 类比：两个都叫 User 的 struct，一个含敏感字段、一个不含，不该用同一个类型。
- */
 export interface UserMe {
   id: number
   studentId: string
@@ -633,15 +474,3 @@ export interface RawAdminContact {
   email?: string | null
   can_message?: boolean | null
 }
-
-// =====================================================================
-// 评论模块已经在 v1.1（2026-10-02）里【被删除】了。
-//
-// 这里的 Comment / RawComment / CreateCommentPayload / CommentQuery 等类型
-// 曾经存在过，现在按 v1.1 全部删掉。同时 P1 / P2 里的 comment_count 字段也没了。
-//
-// 为什么留这段说明？
-//   因为"删掉的东西"最容易在下次改代码时被误加回来 ——
-//   有人看到 P1 少了 comment_count，可能以为是漏了，然后照着旧文档补上。
-//   写清楚"这是契约要求的删除，不是遗漏"，能省一次返工。
-// =====================================================================

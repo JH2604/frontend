@@ -1,52 +1,4 @@
 <script setup lang="ts">
-// =====================================================================
-// 信息详情页（帖子的详情 + 改状态 + 删除 + 私信入口）
-// =====================================================================
-//
-// 【它在哪里】
-// router/index.ts:  { path: 'items/:id', component: ItemDetail }
-// 地址 /items/1、/items/999 都进这里（:id 是动态参数）。
-//
-// 【页面上的东西分别来自哪个接口】
-// 标题/正文/图片/地点/时间  <- P2 GET /posts/{id}
-// 「标记为已找到」「撤回为进行中」 <- P5 PATCH /posts/{id}/status
-// 「删除」                        <- P4 DELETE /posts/{id}
-// 「私信 TA」                     <- U6 GET /users/{id}（先问 can_message）
-// 然后跳 /messages/{作者id}
-//
-// 【本文件里 4 处"不要想当然"的设计】
-//
-// ① 拿不到数据时【绝不能白屏】
-// catch 里把 detail 置成 null，模板就会渲染 <el-empty>「没有找到这条信息」。
-// 这是验收硬要求：/items/999 不能白屏。
-//
-// ② 按钮显不显示，看后端给的字段，不看自己猜
-// - 「私信 TA」用 authorProfile.canMessage（U6 返回的）
-// - 「标记完结」用 detail.canChangeStatus（P2 返回的）
-// - 「删除」用 detail.canDelete（P2 返回的）
-// 为什么不自己判断"是不是我发的"？因为契约把规则放在后端：
-// 比如"不能私信自己""管理员也不能改别人帖子状态"。
-// 前端自己猜就会做出"按钮能点但一请求就 403"的坏入口。
-//
-// ③ P5 只返回 { id, status, closed_at }，不是完整详情
-// 所以改完状态必须重新调一次 P2（fetchDetail()）刷新页面。
-// 如果拿 P5 的返回值直接覆盖 detail，标题就会变成空字符串。
-//
-// ④ 状态是【双向】的（契约 v1.1 明确写了）
-// open -> closed：标记为已找到 / 已认领
-// closed -> open：撤回为进行中
-// 所以用 targetStatus 算出"按下去会变成什么"，而不是写死一个方向。
-//
-// 【本文件的语法点】
-// useRoute() / useRouter()  读当前路由 / 跳页（别搞混，差一个字母）
-// ref<Item | null>(null)    联合类型：要么是 Item，要么是 null
-// computed(...)             由其他数据算出来的值
-// onMounted(fetchDetail)    页面出来时拉一次数据
-//
-// 【关于 el-descriptions / el-image 这些标签】
-// 都是 Element Plus 的现成组件。记不住没关系，
-// 看标签名基本能猜到用途（descriptions=描述列表，image=图片）。
-// 真正要花时间的是数据流，不是这些标签的名字。
 
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -64,18 +16,6 @@ const router = useRouter()
 const loading = ref(false)
 const detail = ref<Item | null>(null)
 
-/**
- * 发帖人的可联系状态（U6 查询结果）。
- *
- * 为什么要先查一次 U6，而不是直接放一个"私信"按钮？
- *   契约第 6 章开头写着"站内私信是用户之间唯一的联系方式"，
- *   但"能不能私信这个人"是后端说了算的（比如不能私信自己）。
- *   U6 返回里的 `can_message` 就是这个答案。
- *
- *   按交接说明第 9 节第 6 条：**知道后端一定会拒绝的操作，前端不要给出入口**。
- *   所以这里先问，拿到了 canMessage 才决定按钮显不显示。
- *   代价是多一次请求，换来的是"按钮点了一定能用"。
- */
 const authorProfile = ref<UserProfile | null>(null)
 const profileLoading = ref(false)
 
@@ -93,26 +33,8 @@ async function fetchAuthorProfile(authorId: number) {
   }
 }
 
-/**
- * 当前状态下"这个按钮按下去会变成什么"。
- *
- * v1.1 明确写了状态是**双向**的：
- *   closed → 标记已找到 / 已认领
- *   open   → 撤回为进行中（比如误点）
- * 所以不用布尔值，直接存目标状态。
- *
- * C++ 类比：用 `enum class Status` 而不是 `bool closed` ——
- * 布尔值表达不了"两个方向"，加一个方向就得重构。
- */
 const targetStatus = computed<ItemStatus>(() => (detail.value?.status === 'open' ? 'closed' : 'open'))
 
-/**
- * 按钮上的文案，随"帖子类型 + 目标状态"变。
- *
- * 文案来自 contract.ts 的 STATUS_TEXT（v1.1 第 1.7 节规定的说法）：
- *   locked/open  失物=未找到，招领=待认领
- *   closed       失物=已找到，招领=已认领
- */
 const actionText = computed(() => {
   if (!detail.value) return ''
   const { type } = detail.value
@@ -137,13 +59,6 @@ async function fetchDetail() {
   }
 }
 
-/**
- * 私信发帖人（跳到聊天页）。
- *
- * 带上 post_id 让后端知道"这条私信是从哪个帖子发起的"——
- * 契约 M4 的 post_id 字段就是这个用途，对方在消息列表里能看到"来自帖子 xxx"。
- * 我们在跳转时用 query 把帖子 id 带过去，聊天页再发给后端。
- */
 function handleMessage() {
   if (!detail.value) return
   router.push({
@@ -152,19 +67,6 @@ function handleMessage() {
   })
 }
 
-/**
- * 改状态（文档 P5）。
- *
- * 两处按 v1.1 改过：
- *   1. 判断条件从 isMine 改成 canChangeStatus。
- *      契约第 7 章权限表："修改他人帖子的状态 → 管理员也 ✗"，
- *      所以 canChangeStatus 目前等价于 isMine；但用后端给的这个字段更稳
- *      （万一以后放开"管理员也能改"，用 isMine 就漏了）。
- *   2. 改完必须重新拉一次详情。
- *      因为 v1.1 的 P5 **只返回** { id, status, closed_at }，
- *      不再返回完整帖子。想更新页面上的状态标签/按钮文案，
- *      就得再调一次 P2。以前的代码也是这么做的，这里保持不变。
- */
 async function handleToggleStatus() {
   if (!detail.value) return
   const target = targetStatus.value
@@ -191,8 +93,6 @@ async function handleToggleStatus() {
   }
 }
 
-// 删除（文档 P4，本人或管理员）。
-// 能不能删是后端算好的（返回里的 can_delete），前端只管照着显示。
 async function handleDelete() {
   if (!detail.value) return
 
@@ -248,8 +148,6 @@ onMounted(fetchDetail)
         <el-descriptions-item label="发布人">{{ detail.author.name }}</el-descriptions-item>
         <el-descriptions-item label="编号">{{ detail.id }}</el-descriptions-item>
 
-        <!-- 已完结时显示"什么时候完结的"（v1.1 新增的 closed_at）。
-             进行中是 null，就显示一个短横，不留空白。 -->
         <el-descriptions-item label="完结时间">
           <span v-if="detail.closedAt" :title="formatDateTime(detail.closedAt)">
             {{ fromNow(detail.closedAt) }}
@@ -275,14 +173,7 @@ onMounted(fetchDetail)
       </div>
 
       <div class="actions">
-        <!-- 私信发帖人（v1.1 契约第 6 章 + U6）。
-             v1.1 把私信定为"用户之间唯一的联系方式"，所以详情页要给入口。
 
-             ⚠️ 三个条件缺一不可：
-               1. authorProfile 拿到了（U6 请求成功）
-               2. canMessage 为 true（后端说的，不是我们猜的；比如不能私信自己）
-               3. 不是我自己发的帖子（自己跟自己聊没意义，后端也会拒）
-             这就是"知道后端一定会拒绝的操作，前端不要给出入口"。 -->
         <el-button
           v-if="authorProfile?.canMessage && !detail.isMine"
           :loading="profileLoading"
@@ -291,11 +182,6 @@ onMounted(fetchDetail)
           私信 TA
         </el-button>
 
-        <!-- 改状态按钮（P5）。
-             判断用后端给的 canChangeStatus，不用 isMine（原因见 script 里的注释）。
-             文案随"帖子类型 + 目标状态"变：
-               进行中 → 「标记为已找到」/「标记为已认领」
-               已完结 → 「撤回为进行中」 -->
         <el-button
           v-if="detail.canChangeStatus"
           :type="detail.status === 'open' ? 'primary' : 'default'"

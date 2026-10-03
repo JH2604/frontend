@@ -1,57 +1,4 @@
 <script setup lang="ts">
-// =====================================================================
-// 聊天页（私信记录 + 发消息，契约 M3 + M4 + M5）
-// =====================================================================
-//
-// 【它在哪里】
-// router/index.ts:  { path: 'messages/:peerId', component: Conversation }
-// 地址 /messages/1002 = 和 id 为 1002 的那个人聊天。
-// 进入方式：
-// 消息列表里点一条            -> views/user/Messages.vue
-// 用户主页点「私信 TA」       -> views/user/UserProfile.vue
-// 帖子详情点「私信 TA」       -> views/user/ItemDetail.vue（还会带 ?postId=xxx）
-// 联系管理员点「私信」         -> views/user/Admins.vue
-//
-// 【这个页面上每个东西来自哪】
-// 聊天记录        <- M3 GET /messages/conversations/{peer_id}（【游标】分页）
-// 对方的名字头像  <- M3 返回体里的 peer
-// 「提醒对方」开关 <- M3 返回体里的 can_remind（false 就不显示这个开关）
-// 发送            <- M4 POST /messages（body 里可带 remind: true）
-// 进页面自动已读  <- M3 的 mark_read 默认 true + M5
-//
-// 【本文件里 4 处必须理解的设计】
-//
-// ① M3 是【游标分页】，不是页码分页
-// 参数是 before_id（取这条之前的历史）+ limit，返回里带 has_more。
-// 为什么聊天记录必须用游标？因为聊天是"不断往上追加"的：
-// 用页码的话，你翻到第 2 页时如果来了新消息，整个页码都会错位，
-// 出现"翻页看到重复消息"。游标（记住最后一条的 id）没这个问题。
-// C++ 类比：用 list 的迭代器，而不是 vector 的下标。
-//
-// ② M3 的 list 按时间【正序】，而 M2 是倒序
-// 所以"更早的消息"在数组【前面】，加载更多是往数组【前面】插。
-// 这两个顺序不一样是契约明确写的，别"统一"掉。
-//
-// ③ M4 的返回体是【嵌套】的 { message, remind }
-// 而且契约原文："提醒失败不影响私信本身，接口仍返回 201"。
-// 所以这里无论 remind 是什么结果，都按"发送成功"处理，
-// 只是用一句提示告诉用户提醒的情况（describeRemind 在 contract.ts 里）。
-//
-// ④ 发送成功后【本地追加】，不重新拉整个会话
-// 因为 M3 是游标分页，重新拉只会拿到"最新 20 条"，
-// 用户之前翻上去看的历史就没了，滚动位置也会跳。
-//
-// 【本文件的语法点】
-// computed(() => Number(route.params.peerId))
-// 动态参数的原始类型是【字符串】，要转成数字。
-// 注意这里用箭头函数包着 —— computed 收的是"一个函数"，不是值。
-// watch(peerId, ...)   路由参数变了（换个人聊）要重新加载。
-// 只写 onMounted 的话，组件复用时会看到上一个人的记录。
-// nextTick(...)        等 DOM 更新完再执行（这里用来"滚到底部"，
-// 不 nextTick 的话元素还没渲染出来，滚不了）
-// ref<HTMLElement|null> 拿到真实 DOM 元素（这里是为了操作滚动位置）
-// 注意：这种 ref 和"响应式数据"的 ref 是两码事，
-// 区分方法是有没有在模板里写 ref="同一个名字"
 
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -68,28 +15,6 @@ import {
 } from '@/utils/contract'
 import { formatDateTime, fromNow } from '@/utils/format'
 import { setUnreadTotal } from '@/utils/unread'
-
-// =====================================================================
-// 私信聊天页（v1.1 契约 M3 私信记录 + M4 发送私信 + M5 标记已读）
-//
-// M3 GET /messages/conversations/{peer_id}?before_id&limit&mark_read
-// M4 POST /messages
-// M5 PUT /messages/read
-//
-// ⚠️ 三处 v1.1 的关键点，写错了就会出玄学 bug：
-//
-//   1. **M3 是游标分页，不是页码分页**（`before_id` + `has_more`）。
-//      聊天记录必须用游标：用页码的话，翻页期间来了新消息，页码会整体错位，
-//      出现"翻页看到重复消息"。C++ 类比：用 `list::iterator` 而不是
-//      `vector` 的下标 —— 容器变了，迭代器仍然指向同一条数据。
-//
-//   2. **M3 的 list 按时间【正序】**（契约原文），和 M2 的倒序相反。
-//      所以"更早的消息"在数组**前面**，加载更多是往数组**前面**插入。
-//
-//   3. **M4 的返回体是嵌套的** `{ message, remind }`，而且
-//      **提醒失败不影响私信本身**（契约原文）—— 所以绝不能因为
-//      remind.status === 'failed' 就把这次发送当成失败。
-// =====================================================================
 
 defineOptions({ name: 'Conversation' })
 
@@ -117,14 +42,6 @@ const peerId = computed(() => Number(route.params.peerId))
 const peer = computed(() => conversation.value?.peer ?? null)
 const canRemind = computed(() => conversation.value?.canRemind ?? false)
 
-/**
- * 从帖子详情页跳过来时，地址栏上带着 `?postId=123`。
- *
- * 为什么要带它？契约 M4 的 `post_id` 字段：带上之后对方在消息列表里
- * 能看到"来自帖子 xxx"，知道这条私信是因为哪个帖子来的。
- * 只有**第一条**消息需要带（后面的对话对方已经知道上下文了），
- * 所以发完之后把它清掉。
- */
 const postId = ref<number | undefined>(
   route.query.postId ? Number(route.query.postId) : undefined,
 )
@@ -155,9 +72,6 @@ async function fetchConversation() {
     list.value = res.list
     hasMore.value = res.hasMore
 
-    // M3 默认已经帮我们把对方的消息标成已读了，但返回里没给最新的未读总数，
-    // 所以这里再调一次 M5 拿 unread_total，顺便把小红点同步对。
-    // （用 peer_id 范围标记是幂等的，重复调用没有副作用。）
     try {
       const marked = await markRead({ peerId: peerId.value })
       setUnreadTotal(marked.unreadTotal)
@@ -176,11 +90,6 @@ async function fetchConversation() {
   }
 }
 
-/**
- * 加载更早的消息（游标分页）。
- *
- * 游标取"当前最早那条的 id"，因为 list 是正序的，[0] 就是最早的一条。
- */
 async function loadMore() {
   const earliest = list.value[0]
   if (!earliest || loadingMore.value) return
@@ -192,10 +101,6 @@ async function loadMore() {
       { beforeId: earliest.id, limit: MESSAGE_PAGE_SIZE_DEFAULT },
       userStore.userId,
     )
-    // 往前插入，并且按 id 去重 ——
-    // 游标分页理论上不会重复，但"去重"这个动作成本极低，
-    // 能防住"后端边界算错导致同一条出现两次"这种偶发问题。
-    // C++ 类比：往 set 里 insert，重复的自然被吸收。
     const existing = new Set(list.value.map((m) => m.id))
     const older = res.list.filter((m) => !existing.has(m.id))
     list.value = [...older, ...list.value]
@@ -233,20 +138,12 @@ async function handleSend() {
       userStore.userId,
     )
 
-    // ⚠️ 契约原文："提醒失败**不影响私信本身**，私信始终发送成功，接口仍返回 201。"
-    //    所以这里无论 remind 是什么结果，都按"发送成功"处理，
-    //    只是把提醒的情况用一句提示告诉用户。
     const remindText = describeRemind(res.remind.status, res.remind.reason, res.remind.channel)
     ElMessage.success(remindText)
 
-    // 本地追加，不重新拉整个会话：
-    // 因为 M3 是游标分页，重新拉只会拿到"最新 20 条"，
-    // 用户之前翻上去看的历史就没了，滚动位置也会跳。
     list.value = [...list.value, res.message]
     draft.value = ''
     wantRemind.value = false
-    // 帖子上下文只用一次：发出去之后就把地址栏上的 postId 清掉，
-    // 免得后面每条消息都被当成"来自这个帖子"（那会让对方看到一串重复的帖子引用）
     postId.value = undefined
     await scrollToBottom()
   } catch {
@@ -256,8 +153,6 @@ async function handleSend() {
   }
 }
 
-// 从一个人的聊天切到另一个人时，路由参数变了但组件会复用，
-// 所以必须 watch 参数重新加载。只靠 onMounted 会看到上一个人的聊天记录。
 watch(peerId, (id) => {
   if (id) fetchConversation()
 })
@@ -326,9 +221,7 @@ onMounted(fetchConversation)
         />
 
         <div class="editor-foot">
-          <!-- 提醒开关：契约说由 M3 的 can_remind 决定显不显示。
-               对方没绑手机号/邮箱、或关了提醒时，后端会给 can_remind=false，
-               这时候【不显示】这个开关（而不是显示了再让后端拒绝）。 -->
+
           <el-checkbox v-if="canRemind" v-model="wantRemind">
             短信 / 邮件提醒对方
           </el-checkbox>

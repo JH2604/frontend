@@ -1,42 +1,3 @@
-// =====================================================================
-// 时间格式化（utils 层，纯函数，没有副作用）
-//
-// 【它在哪里】
-//   几乎所有页面都用它来显示时间：
-//     components/PostTable.vue        "3小时前"
-//     views/user/ItemDetail.vue       发布时间、丢失时间、完结时间
-//     views/user/Messages.vue         消息时间
-//     views/user/UserProfile.vue      注册时间、最近登录
-//
-//   它不依赖网络、不依赖 Vue，只是"字符串进、字符串出"。
-//   这种"纯函数"最适合放在 utils/ 里被到处复用。
-//
-// 【三个导出函数，用途各不相同】
-//   formatDateTime(x)  绝对时间，如 '2026-10-01 14:48'  —— 鼠标悬停时显示
-//   fromNow(x)         相对时间，如 '3小时前'            —— 列表里显示
-//   toIso(x)           转成后端要的带时区字符串          —— 提交表单时用
-//
-// 【为什么要两个时间格式】
-//   fromNow 好扫（一眼知道多新），但不精确；
-//   formatDateTime 精确但字长。
-//   所以项目的做法是：界面显示 fromNow，鼠标悬停用 title 属性显示 formatDateTime。
-//   两者兼得。见 PostTable.vue 里 <span :title="...">{{ fromNow(...) }}</span>
-//
-// 【本文件里 1 个容易踩的坑】
-//   ⚠️ 不能用 new Date().toISOString() 当"发给后端的时间"！
-//      它返回的是 UTC（结尾是 Z），比北京时间少 8 小时，后端会存错时间。
-//      所以 toIso() 是手动拼出 +08:00 的形式。
-// =====================================================================
-
-/**
- * 时间格式化工具。
- *
- * 为什么需要它？
- * 后端返回的是标准时间字符串（文档 1.1，如 2026-10-01T14:48:00+08:00），
- * 但界面上直接显示这一长串很难看。组长给的手机原型里有 ago() 函数，
- * 专门把时间转成"3小时前"这种说法，我们项目里原本没有，所以补上。
- */
-
 /** 补零：1 -> "01"。类比 C++ 的 printf("%02d", n) */
 function pad(n: number): string {
   return String(n).padStart(2, '0')
@@ -46,12 +7,6 @@ function pad(n: number): string {
 function toDate(input: string | number | Date | null | undefined): Date | null {
   if (input === null || input === undefined || input === '') return null
 
-  // 标准 ISO（2026-10-01T14:48:00+08:00）任何浏览器都能解析，
-  // 但项目里实际出现过两种"看着像时间、其实不是 ISO"的写法：
-  //   2026-09-19 14:00        —— mock 数据里的写法（空格分隔）
-  //   2026/10/2 14:30:00      —— new Date().toLocaleString('zh-CN') 的输出
-  // 这两种 Safari / 部分环境会解析失败，返回 Invalid Date。
-  // 所以这里统一改写成 ISO 的 2026-09-19T14:00:00 再交给 new Date()。
   let value: string | number | Date = input
   if (typeof input === 'string') {
     const m = input.match(
@@ -73,14 +28,6 @@ function toDate(input: string | number | Date | null | undefined): Date | null {
   return Number.isNaN(d.getTime()) ? null : d
 }
 
-/**
- * 格式化成 "2026-10-01 14:48"（或只要日期 / 只要时间）
- *
- * mode:
- *   'full' -> 2026-10-01 14:48
- *   'date' -> 2026-10-01
- *   'time' -> 14:48
- */
 export function formatDateTime(
   input: string | number | Date | null | undefined,
   mode: 'full' | 'date' | 'time' = 'full',
@@ -96,20 +43,12 @@ export function formatDateTime(
   return `${date} ${time}`
 }
 
-/**
- * 相对时间：把时间转成"刚刚 / 5分钟前 / 3小时前 / 2天前"。
- * 超过 30 天就直接显示日期。
- *
- * 对应组长原型 index.html 第 173 行的 ago()。
- */
 export function fromNow(input: string | number | Date | null | undefined): string {
   const d = toDate(input)
   if (!d) return ''
 
   const diffMs = Date.now() - d.getTime()
 
-  // 未来时间（服务器时间比本机快、或用户手填了未来时间）直接显示日期，
-  // 不然会出现"-3分钟前"这种奇怪的东西
   if (diffMs < 0) return formatDateTime(d, 'date')
 
   const minutes = Math.floor(diffMs / 60000)
@@ -125,20 +64,10 @@ export function fromNow(input: string | number | Date | null | undefined): strin
   return formatDateTime(d, 'date')
 }
 
-/**
- * 转成后端要的 ISO 8601（带本地时区偏移）。
- *
- * 注意：不能直接用 new Date().toISOString()！
- * 那个返回的是 UTC 时间（结尾是 Z，如 2026-10-01T06:48:00.000Z），
- * 比北京时间少 8 小时，传给后端就会存错时间。
- * 这里手动拼出 +08:00 的形式。
- */
 export function toIso(input: string | number | Date | null | undefined): string {
   const d = toDate(input)
   if (!d) return ''
 
-  // getTimezoneOffset() 返回的是"UTC 减本地"的分钟数，北京是 -480，
-  // 所以取负号才是我们想要的偏移量
   const offsetMinutes = -d.getTimezoneOffset()
   const sign = offsetMinutes >= 0 ? '+' : '-'
   const abs = Math.abs(offsetMinutes)

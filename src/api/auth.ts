@@ -1,3 +1,38 @@
+// =====================================================================
+// 认证接口层（契约 A1~A4）
+//
+// 【它在哪里】
+//   views/LoginView.vue          登录/注册按钮
+//   layouts/UserLayout.vue       退出按钮
+//   layouts/AdminLayout.vue      退出按钮
+//         ↓ 调用本文件
+//   api/auth.ts  ★ 你在这里
+//         ↓
+//   utils/request.ts  →  mock/ 或 真后端
+//
+//   ⚠️ 还有一个"隐式调用方"：utils/request.ts 里处理 40101（令牌过期）时
+//      会自己去调 A4 刷新令牌 —— 那条路不经过本文件的 refreshToken 函数，
+//      而是 request.ts 内部直接用 axios 发的（原因见那边的注释）。
+//
+// 【契约里的 4 个接口】
+//   A1 POST /auth/register   注册
+//   A2 POST /auth/login      登录（返回 access_token + refresh_token + user）
+//   A3 POST /auth/logout     退出（让后端把这个会话吊销掉）
+//   A4 POST /auth/refresh    用 refresh_token 换一对新令牌
+//
+// 【本文件里 3 处关键设计】
+//   1. login() 优先用后端返回的 user 对象取角色/姓名/id；
+//      取不到才去解 JWT 令牌 —— 那是"后端还没改完"时的兜底。
+//   2. logoutApi() 带 `silent: true`：退出失败不弹红字
+//      （不管后端成不成功，本地都必须退干净）。
+//   3. 字段名不写死：`student_id` 来自 contract.ts 的 LOGIN_ID_FIELD，
+//      令牌字段来自 ACCESS_TOKEN_FIELDS —— 契约定下来只改那里。
+//
+// ⚠️ 和 api/user.ts 的 getMe() 重名问题：
+//   本文件底部也有个 getMe()，也是 GET /users/me，但返回的是**未映射的原始对象**。
+//   要用"我的信息"请用 api/user.ts 的 getMyProfile()（带驼峰映射）。
+// =====================================================================
+
 import { http } from '@/utils/request'
 import { USE_MOCK, delay, mockLogin, mockRegister } from '@/mock'
 import {

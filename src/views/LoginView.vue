@@ -1,4 +1,47 @@
 <script setup lang="ts">
+// =====================================================================
+// 登录 / 注册页
+// =====================================================================
+//
+// 【它在哪里】
+// router/index.ts 里 path: '/login'
+//
+// 这是【唯一一个不需要登录】的页面 —— 注意它不在 UserLayout 的
+// children 里，所以不受 requireAuth 守卫拦截。
+// 其他所有页面都在 UserLayout / AdminLayout 下面，都必须先登录。
+//
+// 【登录成功之后会发生什么（完整链路）】
+// 1. 本文件的 handleSubmit()
+// 2.   -> login(params)          调 api/auth.ts
+// 3.      -> http(...)           走 utils/request.ts（贴令牌、拆壳）
+// 4.         -> mock 或真后端    拿到 { token, role, username, userId }
+// 5.   <- userStore.setLogin(res) 存进全局状态（stores/user.ts）+ localStorage
+// 6.   -> router.push(redirect)   跳到首页 / 管理端
+//
+// 整个过程里"登录状态"只在一处被写入：userStore.setLogin()。
+// 以后任何地方要判断"有没有登录"，都去读 userStore，不自己存一份。
+//
+// 【登录 / 注册在同一个页面】
+// 用 el-tabs 切换，靠 activeTab 这个 ref（'login' | 'register'）区分。
+// 提交时：
+// activeTab.value === 'register' ? await register(params) : await login(params)
+//
+// 【redirect 参数是怎么来的】
+// 路由守卫拦下未登录用户时，会记下他本来想去哪：
+// return { path: ROUTE_LOGIN, query: { redirect: to.fullPath } }
+// 登录成功后本文件读出来送他回去：
+// const redirect = (route.query.redirect as string) || (res.role === 'admin' ? '/admin' : '/')
+// 没这个的话，用户点"发布"被弹到登录页，登录完却出现在首页，会很烦。
+//
+// 【本文件的语法点】
+// reactive({...})      一组相关的表单字段（studentId / password / ...）
+// 注意：用它就不用写 .value
+// ref(...)             单个值（activeTab、loading、formRef）
+// FormInstance         表单实例的类型，拿它调 .validate() 做校验
+// FormRules            校验规则的类型
+// await ... .catch()   validate() 不通过会 reject，这里 catch 成 false
+// try/catch/finally    catch 是空的（注释说明了原因：提示已由拦截器统一弹过）
+
 import { reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'

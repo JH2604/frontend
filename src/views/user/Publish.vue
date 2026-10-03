@@ -1,4 +1,40 @@
 <script setup lang="ts">
+// =====================================================================
+// 发布信息页（对应契约 P3）
+// =====================================================================
+//
+// 【它在哪里】
+// router/index.ts:  { path: 'publish', component: Publish }
+// 入口：页头右上角的「发布信息」按钮（UserLayout.vue 里 router.push(ROUTE_PUBLISH)）
+//
+// 【表单字段 -> 契约 P3 请求体的对照】
+// 表单变量          发给后端的字段名      说明
+// ---------------  -------------------  --------------------------------
+// form.type        type                 必填，'lost' 失物 / 'found' 招领
+// form.title       title                必填，1~30 字
+// form.content     content              必填，1~1000 字
+// form.images      images               可选，最多 9 张（走 F1 上传拿 URL）
+// form.locationName location.name        必填（后端要的是对象 { name }）
+// form.eventTime   event_time           可选，转成 ISO 字符串才发
+//
+// 注意 form 里的名字和契约字段不是一一对应：
+// locationName  -> location: { name }
+// eventTime     -> event_time（还要 toIso() 转格式）
+// 这些"整理"动作都在 api/item.ts 的 toCreateBody() 里做，页面不管。
+//
+// 【本文件的语法点】
+// reactive({...})        表单字段集中放一个对象（不用写 .value）
+// FormInstance/FormRules 表单校验的类型
+// rules                  "什么时候校验、校验什么、报什么错"
+// trigger: 'blur' 意思是"输入框失焦时校验"
+// max / required         Element Plus 内置的校验规则（不用自己写函数）
+// toIso(...)             utils/format.ts 的函数，把 Date 转成带时区的字符串
+//
+// 【一个容易被忽略的细节】
+// el-date-picker 的 v-model 拿到的是 Date 对象，不是字符串。
+// 直接发给后端会变成 "Wed Oct 01 2026 ..." 这种格式，后端解析不了。
+// 所以必须 toIso()。这也是为什么这个文件要 import format.ts。
+
 import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'

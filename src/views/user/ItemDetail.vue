@@ -1,4 +1,53 @@
 <script setup lang="ts">
+// =====================================================================
+// 信息详情页（帖子的详情 + 改状态 + 删除 + 私信入口）
+// =====================================================================
+//
+// 【它在哪里】
+// router/index.ts:  { path: 'items/:id', component: ItemDetail }
+// 地址 /items/1、/items/999 都进这里（:id 是动态参数）。
+//
+// 【页面上的东西分别来自哪个接口】
+// 标题/正文/图片/地点/时间  <- P2 GET /posts/{id}
+// 「标记为已找到」「撤回为进行中」 <- P5 PATCH /posts/{id}/status
+// 「删除」                        <- P4 DELETE /posts/{id}
+// 「私信 TA」                     <- U6 GET /users/{id}（先问 can_message）
+// 然后跳 /messages/{作者id}
+//
+// 【本文件里 4 处"不要想当然"的设计】
+//
+// ① 拿不到数据时【绝不能白屏】
+// catch 里把 detail 置成 null，模板就会渲染 <el-empty>「没有找到这条信息」。
+// 这是验收硬要求：/items/999 不能白屏。
+//
+// ② 按钮显不显示，看后端给的字段，不看自己猜
+// - 「私信 TA」用 authorProfile.canMessage（U6 返回的）
+// - 「标记完结」用 detail.canChangeStatus（P2 返回的）
+// - 「删除」用 detail.canDelete（P2 返回的）
+// 为什么不自己判断"是不是我发的"？因为契约把规则放在后端：
+// 比如"不能私信自己""管理员也不能改别人帖子状态"。
+// 前端自己猜就会做出"按钮能点但一请求就 403"的坏入口。
+//
+// ③ P5 只返回 { id, status, closed_at }，不是完整详情
+// 所以改完状态必须重新调一次 P2（fetchDetail()）刷新页面。
+// 如果拿 P5 的返回值直接覆盖 detail，标题就会变成空字符串。
+//
+// ④ 状态是【双向】的（契约 v1.1 明确写了）
+// open -> closed：标记为已找到 / 已认领
+// closed -> open：撤回为进行中
+// 所以用 targetStatus 算出"按下去会变成什么"，而不是写死一个方向。
+//
+// 【本文件的语法点】
+// useRoute() / useRouter()  读当前路由 / 跳页（别搞混，差一个字母）
+// ref<Item | null>(null)    联合类型：要么是 Item，要么是 null
+// computed(...)             由其他数据算出来的值
+// onMounted(fetchDetail)    页面出来时拉一次数据
+//
+// 【关于 el-descriptions / el-image 这些标签】
+// 都是 Element Plus 的现成组件。记不住没关系，
+// 看标签名基本能猜到用途（descriptions=描述列表，image=图片）。
+// 真正要花时间的是数据流，不是这些标签的名字。
+
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'

@@ -1,4 +1,26 @@
 import { http } from '@/utils/request'
+// =====================================================================
+// 文件上传接口层（契约 F1）
+//
+// 【它在哪里】
+//   components/ImageUploader.vue     发帖时传图、改头像时传图
+//         ↓ 调用本文件
+//   api/file.ts  ★ 你在这里
+//         ↓
+//   utils/request.ts  →  mock/ 或 真后端
+//
+// 【契约 F1】
+//   POST /files   multipart 表单，两个字段：
+//     file   图片文件本身
+//     usage  'avatar'（头像，≤2MB）或 'post'（帖子图片，≤5MB）
+//   返回 { url, width, height, size } —— 前端只关心 url
+//
+// 【为什么不用 el-upload 自带的 action 属性】
+//   el-upload 的 action 是"它自己发请求"，那个请求【带不上我们的
+//   Authorization 头】，后端会返回 40100（未携带令牌）。
+//   所以 ImageUploader.vue 用 http-request 自己发 —— 走本文件，就带上令牌了。
+// =====================================================================
+
 import { USE_MOCK, delay, mockUploadFile } from '@/mock'
 import {
   API_FILES_PATH,

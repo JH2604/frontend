@@ -1,3 +1,57 @@
+// =====================================================================
+// 假后端（"后端还没好时先顶上"的那套假数据 + 假接口）
+// =====================================================================
+//
+// 【它在哪里】
+// api/*.ts 里每个函数都是这个结构：
+//
+// export async function getItemList(params) {
+// if (USE_MOCK) {                    <- 就这一个开关
+// await delay()
+// return mockGetItemList(params)   <- 走本文件（假后端）
+// }
+// return http(...)                   <- 走真后端
+// }
+//
+// 所以本文件扮演的角色就是"一个假的后端服务"。
+// 切换方式：把下面的 USE_MOCK 改成 false，全项目就切到真后端，页面代码一行不用改。
+//
+// 【为什么要这么设计】
+// 前后端可以并行开发。前端不必等后端把接口写好才能做页面。
+//
+// 【本文件里有两类东西，看名字能分清】
+// ① 种子数据（假数据的原始内容）
+// posts         帖子（P1~P5 用）
+// messages      消息（M1~M5 用）
+// meProfile     当前登录用户自己的信息（U1~U5 用）
+//
+// ② mockXxx 函数（假接口，名字和 api/ 里的真函数一一对应）
+// mockGetItemList / mockGetItemDetail / mockCreateItem / ...
+// mockGetUnreadCount / mockGetMessageList / mockSendMessage / ...
+// mockGetMe / mockUpdateMe / mockChangePassword / ...
+//
+// 【⚠️ 三条"假数据必须遵守"的规矩（都是踩过坑总结的）】
+//
+// ① 假数据要写成【下划线的原始形状】（post_id、is_read、created_at……）
+// 因为这样 api/ 里的"字段映射"代码在 USE_MOCK=true 时也会被真跑一遍。
+// 如果假数据直接写成驼峰，那映射代码要等到切真后端才第一次执行 —— 很容易翻车。
+//
+// ② 和"身份"有关的字段【不许写死】，要按"当前是谁在看"现算
+// 比如 can_delete / is_mine / can_change_status。
+// 写死 can_delete: false 的后果：管理员登录后看到的也是"不能删"，
+// 而真后端这时应该给 true —— 等于用假数据把真后端的行为盖住了。
+//
+// ③ 假后端是【有状态】的，而且读操作也会改状态
+// 比如 mockGetConversation 的 mark_read 默认 true，
+// 调一次就把"我收到的"那几条标成已读了。
+// 写测试时不能到处假设"某条还是未读"。
+//
+// 【前端名词】
+// Mock      假数据 / 假接口
+// 种子数据（seed）  一开始就摆在那里的初始数据
+// USE_MOCK  总开关（就在下面几十行）
+// =====================================================================
+
 import type {
   ItemQuery,
   ItemStatus,

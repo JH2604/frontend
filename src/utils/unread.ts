@@ -1,3 +1,28 @@
+// =====================================================================
+// 未读消息数的【共享状态】（契约 M1）
+//
+// 【它在哪里】—— 这个文件解决的是"两个互不相干的地方要共用一份数据"
+//
+//   layouts/UserLayout.vue        菜单上的红色角标：显示它
+//   views/user/Messages.vue       标记已读之后：改小它
+//   views/user/Conversation.vue   进聊天页自动标已读：改小它
+//         ↕ 通过本文件共享
+//   utils/unread.ts  ★ 你在这里
+//         ↓ 内部调
+//   api/message.ts 的 getUnreadCount()（M1）
+//
+// 【为什么用"模块级 ref"而不是 Pinia store】
+//   它只有一个数字 + 一个刷新动作，为它建一个 store 太重。
+//   等它长出四五个字段再搬进 Pinia 也不迟。
+//   C++ 类比：一个全局的 atomic<int>，谁都能读写，不用把引用传一圈。
+//   区别是 Vue 的 ref 是响应式的 —— 改了界面自动更新。
+//
+// 【为什么状态放在模块顶层（函数外面）】
+//   `export const unreadTotal = ref(0)` 写在模块顶层，整个应用只有【一份】。
+//   如果写在 refreshUnread() 里面，每次调用都新建一个，就共享不起来了。
+//   这是 ES 模块的特性：模块只会被求值一次，导出的东西天然是单例。
+// =====================================================================
+
 import { ref } from 'vue'
 import { getUnreadCount } from '@/api/message'
 import { useUserStore } from '@/stores/user'

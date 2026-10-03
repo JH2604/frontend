@@ -1,3 +1,44 @@
+// =====================================================================
+// 用户接口层（契约 U1~U7）
+//
+// 【它在哪里】
+//   views/user/Settings.vue      用户中心：U1 展示 / U2 改资料 / U3 改密码 / U4+U5 绑联系方式
+//   views/user/UserProfile.vue   用户主页：U6
+//   views/user/Admins.vue        联系管理员：U7
+//   views/user/ItemDetail.vue    「私信 TA」按钮：也用 U6（先问 can_message）
+//         ↓ 都调用本文件
+//   api/user.ts  ★ 你在这里
+//         ↓
+//   utils/request.ts  →  mock/ 或 真后端
+//
+// 【契约里的 7 个接口】
+//   U1 GET   /users/me               获取当前用户信息（我自己，联系方式是完整值）
+//   U2 PATCH /users/me               改资料：只有 avatar_url / theme / allow_remind 可改
+//   U3 PUT   /users/me/password      改密码（成功后【所有会话失效】）
+//   U4 POST  /verification-codes     发验证码（channel: sms / email）
+//   U5 PUT   /users/me/contact       绑手机号或邮箱（target 必须和 U4 时一致）
+//   U6 GET   /users/{user_id}        看别人（联系方式由后端按角色遮蔽）
+//   U7 GET   /users/admins           管理员列表（返回数组，不是分页对象）
+//
+// 【本文件里 3 处最容易搞混的地方】
+//
+//   ① U1 和 U6 是两回事，不要合并：
+//        U1 = "我自己"，phone/email 是【完整值】，类型是 UserMe
+//        U6 = "看别人"，detail 由后端遮蔽，类型是 UserProfile
+//      两个类型长得像，合并后一旦后端改遮蔽规则就会两边一起错。
+//
+//   ② api/auth.ts 里已经有个 getMe()，所以这里的 U1 叫 getMyProfile()。
+//      import 错了会拿到未映射的原始对象（一堆下划线字段，页面全是 undefined）。
+//
+//   ③ 打码是【展示层】的事：后端给完整值，前端原样存，
+//      渲染时才调 contract.ts 的 maskPhone / maskEmail。
+//      反过来做会出现"明明绑定了却显示未绑定"这种怪 bug。
+//
+// ⚠️ v1.1 相对 v1.0 的两处破坏性变更：
+//   U5 路径从 /users/me/email 改成 /users/me/contact，
+//   body 从 {email, code} 改成 {channel, target, code}。
+// =====================================================================
+
 import { http } from '@/utils/request'
 import type {
   AdminContact,

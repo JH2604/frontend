@@ -2,6 +2,13 @@
 
 浙江工业大学 软件工程大作业 · 失物招领系统前端。
 
+> ## 📖 第一次看这个项目？先读这个
+>
+> **[`src/导读-从零看懂这个前端项目.md`](src/导读-从零看懂这个前端项目.md)**
+>
+> 那份文件专门讲**项目结构、Vue 语法、前端术语**，是给"写过算法题但没写过工程项目"的人写的。
+> 本 README 只讲技术选型和怎么跑起来。
+
 ## 技术栈
 
 | 项 | 选型 |
@@ -28,23 +35,41 @@ npm run preview  # 预览打包结果
 
 ```
 src/
-  api/          每个后端接口封装成一个函数，内含"真接口 / 假数据"分支
-  assets/       全局样式 + 设计令牌
-  components/   通用组件（PageTable 表格、StatusTag 状态标签、ImageUploader 图片上传）
-  layouts/      两套外壳：用户端 UserLayout、管理端 AdminLayout
-  mock/         假数据 + 假接口，总开关 USE_MOCK 在这里
-  router/       路由表 + 登录/角色守卫
-  stores/       登录态（Pinia）
-  types/        接口协议的类型定义
+  导读-从零看懂这个前端项目.md   ★ 新人先读这个（结构 + 语法 + 术语）
+
+  main.ts        ★ 程序入口（挂载 Vue 应用、初始化主题）
+  App.vue        ★ 根组件（只有一个 <RouterView /> 插座）
+
+  api/           每个后端接口封装成一个函数，内含"真接口 / 假数据"分支
+    auth.ts        A1~A4 注册/登录/退出/刷新令牌
+    user.ts        U1~U7 我的信息/改资料/改密码/验证码/绑联系方式/看别人/管理员列表
+    item.ts        P1~P5 帖子列表/详情/发布/删除/改状态
+    message.ts     M1~M5 未读数/我的消息/私信记录/发私信/标记已读
+    file.ts        F1 图片上传
+  assets/         全局样式 + 设计令牌（含暗色主题变量）
+  components/     通用组件（PageTable 表格、PostTable 列表面板、StatusTag 状态标签、
+                  ImageUploader 图片上传）
+  layouts/        两套外壳：用户端 UserLayout、管理端 AdminLayout
+  mock/           假数据 + 假接口，总开关 USE_MOCK 在这里
+  router/         路由表 + 登录/角色守卫
+  stores/         登录态（Pinia）
+  types/          接口协议的类型定义（纯声明，运行时不存在）
   utils/
-    request.ts   axios 封装：贴 token、拆响应、统一报错
-    contract.ts  契约集中地：字段名、业务码、分页等"待确认项"全在这一个文件
-    cache.ts     带过期时间的内存缓存（分类列表在用）
-    format.ts    时间格式化（相对时间、ISO 8601）
-  views/        页面
-    user/       用户端：列表、详情、发布、我的认领
-    admin/      管理端：发布审核、认领审核、物品管理
+    request.ts    axios 封装：贴 token、拆响应、统一报错、令牌过期自动续期
+    contract.ts   契约集中地：接口路径、字段名、业务码、枚举、路由常量
+    theme.ts      主题 light / dark / system
+    unread.ts     未读消息数的共享状态（菜单小红点）
+    cache.ts      带过期时间的内存缓存
+    format.ts     时间格式化（相对时间、ISO 8601）
+  views/          页面
+    LoginView.vue 登录/注册
+    user/         用户端：列表、详情、发布、我的发布、消息、聊天、用户主页、
+                  用户中心、联系管理员
+    admin/        管理端：帖子管理
 ```
+
+> ⚠️ **契约已经是 v1.1**：评论模块（C1~C3）**已被删除**，消息模块重新编号为 M1~M5。
+> 旧文档 `01-API接口文档(1).md` 已作废，别再照它写代码。
 
 ## 关键设计说明
 
@@ -53,40 +78,51 @@ src/
 `src/mock/index.ts` 里的 `USE_MOCK` 是总开关：
 
 - `true`（默认）：接口层走本地假数据，**不连后端也能跑通完整流程**
-- `false`：走真实后端接口
+- `false`：走真实后端接口（`vite.config.ts` 里代理到 `127.0.0.1:8000`）
 
 好处是前后端可以并行开发，页面代码完全不用改。
 
 ### 2. 契约集中在 `src/utils/contract.ts`
 
-接口文档和群里的约定还有几处没统一（比如响应提示字段是 `message` 还是 `msg`、
-分页字段是 `page_size` 还是 `pageSize`、业务码表以哪份为准）。
+接口文档和群里的约定还有几处没统一（比如响应提示字段是 `message` 还是 `msg`）。
 
 这些"可能会变"的东西**全部收在 `contract.ts` 一个文件里**，
 等 Apifox 上的契约确认之后，只改这一个文件，其它代码不用动。
 
-### 3. 网络层做了兼容处理
+### 3. 网络层做了四件事
 
-`request.ts` 里有三件事：
+`request.ts` 里：
 
 1. 请求拦截器自动贴 `Authorization: Bearer {token}`
 2. 响应拦截器自动"拆壳"（把 `{code, message, data}` 里的 `data` 交给业务代码）
 3. 业务错误统一弹提示；`40100 / 40103 / 40104` 自动清登录态并跳登录页
+4. `40101`（令牌过期）自动调 A4 刷新令牌并重发原请求，**用户无感**
 
-### 4. 缓存策略
+### 4. 主题（契约 U2 的 theme）
 
-- **分类列表**：`utils/cache.ts` 做了 30 分钟缓存，并且做了"请求去重"
-  （同一个 key 并发请求只会真正发一次）
-- **列表页**：`UserLayout.vue` 用 `<keep-alive>` 缓存 `ItemList`，
+- 实现方式：给 `<html>` 挂 `dark` class，配合 Element Plus 的
+  `theme-chalk/dark/css-vars.css`（在 `main.ts` 里 import）
+- 自己的设计令牌（`assets/main.css` 里的 `--color-*`）在 `html.dark` 下换成暗色值
+- 契约要求"先本地生效再异步保存"，见 `views/user/Settings.vue`
+
+### 5. 缓存与状态保持
+
+- **未读数**：`utils/unread.ts` 是一个模块级 `ref`，菜单小红点和消息页共享它
+  （30 秒轮询 + 切回前台补一次，见 `layouts/UserLayout.vue`）
+- **列表页**：`UserLayout.vue` 用 `<keep-alive>` 缓存 `ItemList` / `MyPosts` / `Messages`，
   从详情页返回时搜索条件、页码、滚动位置都还在
 
 ## 开发约定
 
 - 缩进 2 空格，换行 LF（见根目录 `.editorconfig`）
 - 提交前跑一遍 `npm run type-check`
-- 新接口一律写在 `src/api/` 下，不要在页面里直接调 axios
+- 新接口一律写在 `src/api/` 下，**不要在页面里直接调 axios**
+- 下划线字段名**只允许出现在 `src/api/*.ts`**，页面永远只见驼峰
+- 假数据故意写成**下划线的原始形状**，这样转换层在 `USE_MOCK=true` 时也被真跑一遍
+- `if (USE_MOCK)` 分叉里，**校验和规范化必须写在分叉之前**（踩过两次）
 
 ## 相关文档
 
-- 接口文档：见团队 Apifox 项目（最终契约以 Apifox 为准）
-- 群内约定：见 `docs/` 目录
+- 接口契约：见团队 Apifox 项目（**最终契约以 Apifox 为准**）
+- 契约原文备份 + 各类分析文档：`E:\outputs\`
+- 项目结构、语法、术语讲解：`src/导读-从零看懂这个前端项目.md`

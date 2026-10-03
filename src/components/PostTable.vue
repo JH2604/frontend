@@ -1,4 +1,42 @@
 <script setup lang="ts">
+//
+// =====================================================================
+// 帖子列表面板（首页和"我的发布"共用）
+// =====================================================================
+//
+// 【它在哪里】
+// views/user/ItemList.vue      用 PostTable           -> 全部帖子
+// views/user/MyPosts.vue       用 PostTable + mine    -> 只看我发布的
+// 两个页面的区别【只有一个 mine 参数】，其余完全一样，所以抽成这个零件。
+//
+// 【父组件只有一行，是这样的】
+// ItemList.vue 里：    PostTable
+// MyPosts.vue 里：     PostTable mine
+//
+// mine 没写值 = 传了 true（HTML 属性简写，等价 :mine="true"）。
+// 完全不传时，子组件用 withDefaults 给的默认值 false。
+//
+// 【本文件里的语法点（列表页的标配，几乎每页都这么写）】
+// defineProps + withDefaults   声明参数 + 给默认值（C++ 的默认参数）
+// reactive({...})              一组相关的响应式数据放在一个对象里
+// 用它就不用写 .value（对比 ref 必须写 .value）
+// async / await                等请求回来
+// try / catch / finally        固定三件套：
+// try     拿数据
+// catch   出错也要让界面有东西显示（别白屏）
+// finally 无论成败都要关掉 loading
+// onMounted(fetchList)         页面"出生"时自动拉一次
+// onActivated(...)             被 keep-alive 缓存后，第二次进来走这个
+// 而不是 onMounted
+// defineOptions({ name })      给组件起名 —— 必须和 UserLayout 里
+// keep-alive 的 :include 数组里的字符串完全一致，
+// 否则缓存不生效（而且不报错，很难查）
+//
+// 【"制表"式渲染：一行数据 -> 一行的各个格子】
+// columns 数组声明"这个表格有哪些列"，PageTable 照着它画；
+// 每个格子里的内容由插槽决定（本文件在模板里给了 #type / #status / ...）。
+//
+
 import { onActivated, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import type { ItemBrief, ItemStatus, ItemType } from '@/types/api'

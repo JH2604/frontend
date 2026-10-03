@@ -1,4 +1,55 @@
 <script setup lang="ts">
+// =====================================================================
+// 用户中心（设置页，契约 U1~U5 全在这一个页面）
+// =====================================================================
+//
+// 【它在哪里】
+// router/index.ts:  { path: 'settings', component: Settings }
+// 入口：页头菜单的「用户中心」
+//
+// 【这个页面分成 4 块，分别对应哪个接口】
+// ① 基本信息展示    <- U1 GET /users/me
+// ② 头像 / 主题 / 提醒开关 <- U2 PATCH /users/me
+// ③ 绑定手机号或邮箱 <- U4 POST /verification-codes（发码）
+// U5 PUT /users/me/contact（带码提交）
+// ④ 修改密码        <- U3 PUT /users/me/password
+//
+// 【本文件里 5 处"契约要求这么做"的地方（不是可选的美化）】
+//
+// ① 主题：先本地生效，再异步保存，而且保存失败【不回滚】
+// 契约原文："主题切换建议前端先改本地状态并立即生效，再异步调用本接口保存，
+// 这样换设备登录时也能保持主题。"
+// 所以 handleThemeChange 里第一行是 setThemeLocal(next)（界面立刻变），
+// 之后才 await updateMe({ theme })。失败也不回滚 ——
+// 界面已经是用户要的样子了，回滚只会让人莫名其妙。
+//
+// ② 提醒开关：失败要回滚
+// 和主题相反。因为开关是个"动作"，没生效就该退回去。
+//
+// ③ 改密码成功后必须清令牌 + 跳登录页
+// 契约："后端吊销该用户在 user_sessions 里的全部会话（所有设备都会下线）"。
+// 只弹提示不跳的话，用户以为自己还登录着，下一次点击就 40103 被踢。
+//
+// ④ 发完验证码要锁住输入框
+// 契约："target 必须和 U4 发送验证码时一致"。
+// 让用户改了必然失败，不如直接不让改（不给坏入口）。
+//
+// ⑤ 头像保存用 watch 而不是监听事件
+// ImageUploader 是用 defineModel 声明的，父组件直接改值时
+// 不保证会触发 update:model-value 事件，所以监听自己这个 ref 最可靠。
+//
+// 【本文件的语法点】
+// reactive({...})                 表单字段（密码表单、联系方式表单）
+// ref<FormInstance>()             拿表单实例，用来调 validate() / clearValidate()
+// computed(...)                   targetLabel 这种"跟着另一个字段变的文案"
+// watch(avatarList, ...)          监听一个 ref，它变了就执行
+// window.setInterval / clearInterval  倒计时（配合 onUnmounted 清理）
+// 自定义校验 validator            FormRules 里写函数，比如"两次密码要一致"
+//
+// 【注意这个文件为什么长（514 行）】
+// 因为它把 4 个独立功能放在了一个页面。如果觉得难读，
+// 就按上面 ①②③④ 四块分开看，每块都是"表单 + 一个接口调用"。
+
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'

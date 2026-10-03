@@ -1,4 +1,41 @@
 <script setup lang="ts">
+//
+// =====================================================================
+// 图片上传（发帖配图 / 换头像都用它）
+// =====================================================================
+//
+// 【它在哪里】
+// views/user/Publish.vue    发布帖子时传图（最多 9 张，每张 ≤5MB）
+// views/user/Settings.vue   用户中心换头像（1 张，≤2MB）
+//
+// 两处的区别通过 props 传：
+// ImageUploader v-model="form.images"                    默认发帖规则
+// ImageUploader v-model="avatarList" :limit="1"
+// :usage="UploadUsage.AVATAR" :max-mb="AVATAR_MAX_MB"
+//
+// 【本文件里的语法点（两个都是重点）】
+//
+// ① defineModel()
+// Vue 3.4+ 的"双向绑定"写法，等价于同时声明了 props + emit。
+// 父组件写 v-model="form.images"，值就能【双向同步】：
+// 上传成功 -> 子组件改 model.value -> 父组件的 form.images 跟着变
+// 副作用：defineModel 声明的 prop，父组件直接改值时【不保证】会
+// 触发 update:model-value 事件。所以 Settings.vue 里改头像后
+// 是用 watch(avatarList, ...) 去保存的，不是监听那个事件。
+//
+// ② http-request 属性
+// 为什么不用 el-upload 自带的 action 属性？
+// 因为 action 是"它自己发请求"，那个请求【带不上 Authorization 头】，
+// 后端会返回 40100（未携带令牌）。
+// 所以改成"自己发"—— 通过 http-request 指定我们的上传函数。
+//
+// 【前端名词】
+// multipart/form-data  上传文件时用的请求格式（普通 JSON 传不了文件）
+// v-model              双向绑定：子组件改了，父组件的变量也跟着变
+// watch                监听某个数据，它一变就执行回调
+// （本文件用它把上传结果同步给父组件）
+//
+
 import { ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { UploadRequestOptions, UploadUserFile } from 'element-plus'

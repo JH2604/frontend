@@ -1,3 +1,42 @@
+// =====================================================================
+// 消息接口层（契约 M1~M5）
+//
+// 【它在哪里】
+//   layouts/UserLayout.vue        菜单上的未读小红点（M1）
+//   views/user/Messages.vue       消息列表（M2 列表 + M5 标记已读）
+//   views/user/Conversation.vue   聊天页（M3 记录 + M4 发送 + M5 标记已读）
+//   utils/unread.ts               未读数的共享状态（内部调 M1）
+//         ↓ 都调用本文件
+//   api/message.ts  ★ 你在这里
+//         ↓
+//   utils/request.ts  →  mock/ 或 真后端
+//
+// 【契约里的 5 个接口】
+//   M1 GET  /messages/unread-count              未读私信数（只数"我收到的"）
+//   M2 GET  /messages                           我的消息（我收到的 + 我发出的）
+//   M3 GET  /messages/conversations/{peer_id}   私信记录（【游标】分页）
+//   M4 POST /messages                           发送私信（可带提醒）
+//   M5 PUT  /messages/read                      标记已读（ids / peer_id / all）
+//
+// ⚠️ 编号和 v1.0 不一样，别混：
+//   旧 M3 会话列表【被删了】；旧 M4 私信记录 = 新 M3；
+//   旧 M5 发送私信 = 新 M4；旧 M6 标记已读 = 新 M5。
+//
+// 【本文件里 4 处最容易写错的地方（都有对应注释）】
+//   1. 未读有两个含义：received 的 is_read 是"我读没读"（算小红点）；
+//      sent 的 is_read 是"对方读没读"（不算）。所以 M1 只数我收到的。
+//   2. M3 是【游标分页】（before_id + has_more），不是 page/page_size。
+//      而且 M3 的 list 按时间【正序】（M2 是倒序）。
+//   3. M4 返回体是嵌套的 { message, remind }，不是直接给消息对象。
+//   4. 契约原文："提醒失败不影响私信本身" —— 不能因为 remind.status 是
+//      failed 就当成发送失败。
+//
+// 【一个通用约定（踩过两次的坑）】
+//   `if (USE_MOCK)` 这种分叉里，**校验和规范化必须写在分叉之前**。
+//   本文件的 sendMessage 就是先调 toSendBody（截断 + 转字段名）再分叉，
+//   否则假后端会存下没截断的超长内容。
+// =====================================================================
+
 import { http } from '@/utils/request'
 import type {
   Author,

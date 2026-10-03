@@ -1,4 +1,50 @@
 <script setup lang="ts">
+// =====================================================================
+// 消息列表页（"我的消息"，契约 M2 + M5）
+// =====================================================================
+//
+// 【它在哪里】
+// router/index.ts:  { path: 'messages', component: Messages }
+// 入口：页头菜单的「消息」，标题旁边带未读小红点（UserLayout.vue）
+//
+// 【这个页面上每个东西来自哪】
+// 列表数据        <- M2 GET /messages（我收到的 + 我发出的，合并一个列表）
+// 「全部标为已读」 <- M5 PUT /messages/read，body { all: true }
+// 点某一条时的已读 <- M5 PUT /messages/read，body { ids: [那条的id] }
+// 未读小红点       <- M1（通过 utils/unread.ts 共享状态）
+//
+// 【筛选条件只有两个，为什么没有"类型"下拉框】
+// 契约 v1.0 里消息分 private（私信）/ comment（评论通知）两种，
+// 靠 kind 字段区分，那时候有个 kind 筛选。
+// v1.1 把评论模块整个删了，消息只剩私信一种，kind 字段和参数【都没了】。
+// 所以这个页面只有「收件箱 / 发件箱」和「只看未读」。
+//
+// 【本文件里 3 处容易写错的地方】
+//
+// ① isRead 是三态，不能用真值判断
+// 契约原文："不传返回全部；false 只看未读"。
+// 不传        -> 全部
+// isRead=false -> 只看未读
+// isRead=true  -> 只看已读
+// 所以代码里写的是 isRead: query.onlyUnread ? false : undefined。
+// 如果写成 if (params.isRead)，false 会被当成"没传"，行为正好相反。
+//
+// ② markRead 之后要同步小红点
+// M5 的返回值里带 unreadTotal（最新未读数），
+// 直接 setUnreadTotal(res.unreadTotal) 就行 —— 不用再调一次 M1。
+// 契约特意这么设计的，为的就是省一次请求。
+//
+// ③ defineOptions({ name: 'Messages' })
+// 和 UserLayout 里 keep-alive 的 :include 数组必须一致，
+// 这样从聊天页返回列表时，筛选条件和页码还在。
+//
+// 【本文件的语法点】
+// defineOptions({ name })      组件名（影响 keep-alive 缓存）
+// reactive({...})              查询条件（页码、筛选）
+// onMounted / onActivated      首次进入 / 被缓存后再次进入
+// v-loading="loading"          Element Plus 的加载遮罩，绑一个布尔值
+// @click.stop                  阻止冒泡（点头像进主页时，别让"整行点击"也触发）
+
 import { onActivated, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'

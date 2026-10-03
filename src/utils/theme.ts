@@ -1,3 +1,33 @@
+// =====================================================================
+// 主题（契约 1.7 的枚举 light / dark / system，U2 可以改）
+//
+// 【它在哪里】
+//   main.ts                    启动时调 initTheme()（必须在 mount 之前，否则闪一下）
+//   views/user/Settings.vue    用户在"用户中心"切换主题
+//   api/user.ts                登录后 / U1 拉取后，用后端的 theme 覆盖本地
+//
+// 【实现原理，只有一句话】
+//   给 <html> 挂一个 `dark` class，全站的颜色变量就都变了。
+//
+//   具体分两半：
+//     ① Element Plus 的暗色：靠 element-plus/theme-chalk/dark/css-vars.css
+//        （在 main.ts 里 import），它定义了 html.dark 下的所有 --el-* 变量
+//     ② 我们自己的颜色：靠 assets/main.css 里的 html.dark 段，
+//        换掉 --color-bg / --color-text 这些自定义令牌
+//
+//   C++ 类比：这不是"每个控件都去改颜色"，而是【换一整套全局常量表】。
+//   谁引用了这套常量，谁就自动跟着变。
+//
+// 【为什么 localStorage 里还要存一份】
+//   刷新页面时先用本地这份立刻出正确颜色，不等后端 —— 不然会闪。
+//   契约 U2 原话："建议前端先改本地状态并立即生效，再异步调用本接口保存"。
+//
+// 【前端名词】
+//   设计令牌（design token） 把颜色/圆角/间距起个变量名统一管理
+//   FOUC                     页面先闪一下默认样式再变
+//   prefers-color-scheme     浏览器提供的"系统当前是深色还是浅色"
+// =====================================================================
+
 import { ref } from 'vue'
 import type { Theme } from '@/types/api'
 import { STORAGE_KEYS } from '@/utils/contract'

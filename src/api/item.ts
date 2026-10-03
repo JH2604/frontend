@@ -29,16 +29,44 @@ import {
 import { API_POSTS_PATH, PAGE_SIZE_DEFAULT, Role, postPath, postStatusPath, type RoleValue } from '@/utils/contract'
 
 // =====================================================================
-// 帖子（帖子 = 我们以前说的"物品"，只是名字对齐契约）
+// 帖子接口层（帖子 = 我们以前说的"物品"，只是名字对齐契约）
 //
-// 这个文件是发生"下划线 <-> 驼峰"转换的两个地方之一（另一个是 utils/contract.ts
-// 里的通用取值函数）。页面永远只见到驼峰字段。
+// 【它在哪里】—— 记住这条调用链，看任何一页代码都知道自己在哪一层
 //
-// 为什么要多这一层？
+//   views/user/ItemList.vue      首页
+//   views/user/MyPosts.vue       我的发布
+//   views/user/ItemDetail.vue    详情
+//   views/user/Publish.vue       发布
+//   views/admin/ItemManage.vue   管理端
+//         ↓ 都只调用本文件的函数
+//   api/item.ts  ★ 你在这里
+//         ↓
+//   utils/request.ts   （贴令牌、拆壳、报错）
+//         ↓
+//   mock/ 或 真后端
+//
+// 【谁在用本文件里的哪个函数】
+//   getItemList         <- PostTable.vue（首页和"我的发布"共用）、ItemManage.vue
+//   getItemDetail       <- ItemDetail.vue
+//   createItem          <- Publish.vue
+//   updateItemStatus    <- ItemDetail.vue 的「标记为已找到 / 撤回为进行中」
+//   deleteItem          <- ItemDetail.vue、ItemManage.vue
+//
+// 【这个文件干两件事，就这两件】
+//   ① 后端原始形状 -> 前端内部形状：toBrief / toItem / toStatusPatch
+//      并且把 null 一律兜底成安全默认值，页面永远不会拿到 undefined
+//   ② 前端内部形状 -> 发给后端的样子：toQueryParams / toCreateBody
+//      并且把驼峰转成下划线
+//
+// 页面永远只见到驼峰字段（createdAt / coverUrl / …）。
+// 后端给的其实叫 created_at / cover_url。
+//
+// 【为什么要多这一层】
 //   1. 后端将来改字段名，只改这个文件，页面一行都不用动。
-//   2. 后端某个字段忘了传（null），在这一层统一兜底成默认值，
-//      页面永远不会拿到 undefined 去渲染，也就不会白屏。
-//   3. 转换代码只写一遍。要是散在 6 个页面里，漏一个就是线上 bug。
+//   2. 后端某个字段忘了传（null），在这一层统一兜底，
+//      页面不会因为 undefined 而白屏。
+//   3. 转换代码只写一遍。要是散在 6 个页面里，漏一个就是 bug。
+//   C++ 类比：这层就是"反序列化 + 数据清洗"，业务代码只面对干净的结构体。
 //
 // 对应的接口（2026-10-02 v1.1 文档第 5 章）：
 //   P1 GET    /posts                  列表（首页 / 搜索 / 我的帖子 都用它）

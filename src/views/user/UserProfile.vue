@@ -1,4 +1,42 @@
 <script setup lang="ts">
+// =====================================================================
+// 用户主页（契约 U6 查看发帖人信息）
+// =====================================================================
+//
+// 【它在哪里】
+// router/index.ts:  { path: 'users/:id', component: UserProfile }
+// 进入方式（点各种头像）：
+// UserLayout 页头的自己头像   -> /users/{自己的id}
+// Messages.vue 消息列表的头像  -> /users/{对方id}
+// Conversation.vue 聊天页头像  -> /users/{对方id}
+// Admins.vue 管理员头像        -> /users/{管理员id}
+//
+// 【这个页面最核心的一句话（契约原文）】
+// "同一个接口按查看者角色返回不同字段，【由后端控制，不靠前端隐藏】"
+//
+// 具体表现：
+// 普通用户查看别人 -> 后端返回 detail: null，页面上只显示姓名/头像/发帖数
+// 管理员查看别人   -> 后端返回 detail（含学号/手机号/邮箱/最近登录），
+// 页面多渲染一块"详细信息"
+// 查看自己         -> 能看到自己的信息，但 can_message 是 false（不能私信自己）
+//
+// ⚠️ 所以本文件里那块详细信息用的是 v-if="contact"（contact 由 detail 算出来），
+// 绝对【不能】写成 v-if="userStore.isAdmin"。
+// 为什么？因为一旦写成"前端判断角色"，后端规则一变（比如管理员也不能看），
+// 前端就会渲染出一堆后端根本没返回的字段（全空），
+// 甚至暴露出"这里本来有个学号字段"这种信息。
+// C++ 类比：不要用编译期的 #ifdef 去模拟运行期的权限检查。
+//
+// 【本文件的语法点】
+// computed(() => Number(route.params.id))  动态参数转数字
+// watch(userId, ...)   从一个人的主页跳到另一个人的主页时，
+// 组件会被复用，必须 watch 才能重新加载
+// （只靠 onMounted 会看到上一个人的资料）
+// computed(() => {...})  contact：把 profile.detail 整理成好用的形状
+// v-if / v-else          detail 有没有值，决定渲染哪一块
+// maskPhone / maskEmail  打码（来自 contract.ts）—— 注意是【展示时】打码，
+// 数据本身是完整值（契约 U1 的说明）
+
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'

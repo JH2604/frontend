@@ -104,7 +104,7 @@ export async function login(data: LoginParams): Promise<LoginResult> {
   }
 }
 
-export async function register(data: LoginParams): Promise<LoginResult> {
+export async function register(data: LoginParams): Promise<{ name: string }> {
   if (USE_MOCK) {
     await delay()
     const isAdmin = data.role === "admin" || data.studentId === "admin"

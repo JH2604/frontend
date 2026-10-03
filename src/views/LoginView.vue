@@ -5,9 +5,9 @@ import {ElMessage, ElMessageBox, type FormInstance, type FormRules} from 'elemen
 import {login, register} from '@/api/auth';
 import {getMyProfile} from '@/api/user';
 import {useUserStore} from '@/stores/user';
-import {PASSWORD_REGEX, PASSWORD_RULE_TEXT, Role,type RoleValue} from '@/utils/constant';
+import { PASSWORD_RULE_TEXT, Role, type RoleValue } from '@/utils/contract'
 import {syncThemeFromServer} from '@/utils/theme';
-
+const PASSWORD_REGEX = /^(?=.*[A-Za-z])(?=.*\d)\S{8,32}$/
 const route =useRoute();
 const router = useRouter();
 const userStore = useUserStore();
@@ -92,7 +92,7 @@ async function handleSubmit(){
     } catch{
       //未拉到资料时先使用本地缓存的内容
     }
-    ElMessage.success(`登录成功，你好, ${res.name}!`)
+    ElMessage.success(`登录成功，你好, ${res.username}!`)
     const redirect = (route.query.redirect as string) || (res.role === 'admin' ? '/admin': '/')
     router.push(redirect)
   } catch {

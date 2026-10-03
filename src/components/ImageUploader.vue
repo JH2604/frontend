@@ -25,9 +25,9 @@ const props = withDefaults(
 )
 
 const fileList = ref<UploadUserFile[]>([])
-const upLoading = computed(() => fileList.value.some((file) =>  file.status === 'uploading'))
+const uploading = computed(() => fileList.value.some((file) => file.status === 'uploading'))
 
-defineExpose({upLoading})
+defineExpose({ uploading })
 
 async function doUpload(options: UploadRequestOptions) {
   const file = options.file

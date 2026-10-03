@@ -31,7 +31,7 @@ export function delay(ms = 300) {
 }
 export function mockFail (message: string): never {
   ElMessage.error(message)
-  mockFail(message)
+  throw new Error(message)
 }
 export type MockLoginParams = {
   studentId: string

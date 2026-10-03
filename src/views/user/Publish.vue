@@ -13,7 +13,7 @@ const router = useRouter()
 
 const formRef = ref<FormInstance>()
 const loading = ref(false)
-const submiitted = ref(false)
+const submitted = ref(false)
 const uploaderRef = ref<{ uploading: boolean }| null>(null)
 
 const form = reactive({

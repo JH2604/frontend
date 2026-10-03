@@ -113,6 +113,7 @@ function forceLogout(): void {
   localStorage.removeItem(STORAGE_KEYS.refreshToken)
   localStorage.removeItem(STORAGE_KEYS.role)
   localStorage.removeItem(STORAGE_KEYS.username)
+  localStorage.removeItem(STORAGE_KEYS.userId)
   clearCache()
 
   // 已经在登录页就不要再跳了，否则会反复刷新页面、一直闪

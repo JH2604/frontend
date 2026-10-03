@@ -1,5 +1,5 @@
 import { http } from '@/utils/request'
-import { USE_MOCK, delay, mockLogin, mockRegister } from '@/mock'
+import { USE_MOCK, delay, mockLogin } from '@/mock'
 import {
   ACCESS_TOKEN_FIELDS,
   API_LOGIN_PATH,
@@ -104,22 +104,22 @@ export async function login(data: LoginParams): Promise<LoginResult> {
   }
 }
 
-export async function register(data: LoginParams): Promise<LoginResult> {
+export async function register(data: LoginParams): Promise<{ name: string }> {
   if (USE_MOCK) {
     await delay()
-    return mockRegister(data)
+    const isAdmin = data.role === "admin" || data.studentId === "admin"
+    return {name: isAdmin ? "管理员" : '学生'}
   }
-
-  await http<{ id: number; student_id: string; name: string; role: string }>({
+  const res = await http<{ id:number; student_id:string;  role:string; name:string }>({
     url: API_REGISTER_PATH,
     method: 'post',
     data: {
-      [LOGIN_ID_FIELD]: data.studentId,
-      password: data.password,
-      role: data.role ?? Role.STUDENT,
+      [LOGIN_ID_FIELD]: data.studentId, 
+      password: data.password, 
+      role: data.role ?? Role.STUDENT
     },
   })
-  return login(data)
+  return {name:res.name}
 }
 
 export function logoutApi() {

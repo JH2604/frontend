@@ -3,14 +3,17 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import type { ChatMessage, Conversation } from '@/types/api'
+import type { ChatMessage, Conversation, Item } from '@/types/api'
 import { getConversation, markRead, sendMessage } from '@/api/message'
+import { getItemDetail } from '@/api/item'
 import { useUserStore } from '@/stores/user'
+import StatusTag from '@/components/StatusTag.vue'
 import {
   MESSAGE_CONTENT_MAX,
   MESSAGE_PAGE_SIZE_DEFAULT,
   ROUTE_MESSAGES,
   describeRemind,
+  itemDetailPath,
   userProfilePath,
 } from '@/utils/contract'
 import { formatDateTime, fromNow } from '@/utils/format'
@@ -45,6 +48,17 @@ const canRemind = computed(() => conversation.value?.canRemind ?? false)
 const postId = ref<number | undefined>(
   route.query.postId ? Number(route.query.postId) : undefined,
 )
+const linkedPost = ref<Item | null>(null)
+
+async function fetchLinkedPost(){
+  const id = postId.value
+  if (!id) return
+  try {
+    linkedPost.value = await getItemDetail(id)
+  } catch {
+    linkedPost.value = null
+  }
+}
 
 /** 我发出的消息靠右显示，收到的靠左 */
 function isMine(m: ChatMessage): boolean {
@@ -90,9 +104,11 @@ async function fetchConversation() {
   }
 }
 
-async function loadMore() {
+async function loadMore(){
   const earliest = list.value[0]
-  if (!earliest || loadingMore.value) return
+  if (!earliest || loadingMore.value || !hasMore.value) return
+  const box = scroller.value
+  const oldHeight = box?.scrollHeight ?? 0
 
   loadingMore.value = true
   try {
@@ -105,12 +121,21 @@ async function loadMore() {
     const older = res.list.filter((m) => !existing.has(m.id))
     list.value = [...older, ...list.value]
     hasMore.value = res.hasMore
+    await nextTick()
+    if (box) box.scrollTop = box.scrollHeight - oldHeight
   } catch {
-    // 提示已弹
+    // 提示已弹；保留现有消息列表
   } finally {
     loadingMore.value = false
   }
 }
+
+function handleScroll() {
+  const el = scroller.value
+  if (!el || el.scrollTop !== 0 || !hasMore.value || loadingMore.value) return
+  loadMore()
+}
+
 
 /** 发送私信（M4） */
 async function handleSend() {
@@ -157,7 +182,10 @@ watch(peerId, (id) => {
   if (id) fetchConversation()
 })
 
-onMounted(fetchConversation)
+onMounted(() => {
+  fetchConversation()
+  fetchLinkedPost()
+})
 </script>
 
 <template>
@@ -184,7 +212,19 @@ onMounted(fetchConversation)
     <el-empty v-if="!loading && !peer" description="找不到这个用户" />
 
     <template v-else>
-      <div ref="scroller" class="scroller">
+      <div
+        v-if="linkedPost"
+        class="post-card"
+        @click="router.push(itemDetailPath(linkedPost.id))"
+      >
+        <el-tag :type="linkedPost.type === 'lost' ? 'danger' : 'success'" size="small">
+          {{ linkedPost.type === 'lost' ? '失物' : '招领' }}
+        </el-tag>
+        <span class="post-title">{{ linkedPost.title }}</span>
+        <StatusTag :status="linkedPost.status" :item-type="linkedPost.type" />
+      </div>
+
+      <div ref="scroller" class="scroller" @scroll="handleScroll">
         <!-- 加载更早的消息（M3 游标分页） -->
         <div v-if="hasMore" class="more">
           <el-button link :loading="loadingMore" @click="loadMore">加载更早的消息</el-button>
@@ -225,7 +265,7 @@ onMounted(fetchConversation)
           <el-checkbox v-if="canRemind" v-model="wantRemind">
             短信 / 邮件提醒对方
           </el-checkbox>
-          <span v-else class="no-remind">对方未绑定联系方式，无法提醒</span>
+          <span v-else class="no-remind">对方暂不接收短信 / 邮件提醒</span>
 
           <el-button type="primary" :loading="sending" @click="handleSend">
             发送（Ctrl + Enter）
@@ -337,5 +377,23 @@ onMounted(fetchConversation)
 .no-remind {
   font-size: 12px;
   color: #c0c4cc;
+}
+
+.post-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--el-border-color);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.post-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>

@@ -1,72 +1,102 @@
 <script setup lang="ts">
+import {computed, reactive, ref} from 'vue';
+import {useRouter, useRoute} from 'vue-router';
+import {ElMessage, ElMessageBox, type FormInstance, type FormRules} from 'element-plus';
+import {login, register} from '@/api/auth';
+import {getMyProfile} from '@/api/user';
+import {useUserStore} from '@/stores/user';
+import { PASSWORD_RULE_TEXT, Role, type RoleValue } from '@/utils/contract'
+import {syncThemeFromServer} from '@/utils/theme';
+const PASSWORD_REGEX = /^(?=.*[A-Za-z])(?=.*\d)\S{8,32}$/
+const route =useRoute();
+const router = useRouter();
+const userStore = useUserStore();
 
-import { reactive, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
-import { login, register } from '@/api/auth'
-import { useUserStore } from '@/stores/user'
-import { Role, type RoleValue } from '@/utils/contract'
-
-const route = useRoute()
-const router = useRouter()
-const userStore = useUserStore()
-
-const activeTab = ref<'login' | 'register'>('login')
+const activeTab = ref<'login' | "register">('login')
 
 const formRef = ref<FormInstance>()
 const loading = ref(false)
 
 const form = reactive({
-  // 契约（文档 A1/A2）里登录凭证是学号，不是用户名
   studentId: '',
   password: '',
   confirmPassword: '',
-  // 只有注册时用得上。不选就按学生注册
   role: Role.STUDENT as RoleValue,
 })
 
-const rules: FormRules = {
-  studentId: [{ required: true, message: '请输入学号', trigger: 'blur' }],
-  password: [
-    { required: true, message: '请输入密码', trigger: 'blur' },
-    { min: 8, message: '密码至少 8 位', trigger: 'blur' },
-  ],
-}
+const rules = computed<FormRules>(() =>({
+    studentId: [
+      { required: true, message: '请输入学号', trigger: 'blur' },
+      {
+        validator: (_rule, value: string, callback) => {
+          if (value === 'admin'|| /^\d+$/.test(value)) callback()
+          else callback(new Error('学号必须为数字'))
+        },
+        trigger: 'blur',
+      },
+    ],
+    password:
+      activeTab.value === 'register'
+        ?[
+          {required:true, message:'请输入密码', trigger: 'blur'},
+          {pattern:PASSWORD_REGEX, message:PASSWORD_RULE_TEXT, trigger: 'blur'}
+        ]
+      :
+        [{required:true, message:'请输入密码', trigger: 'blur'}],
+    confirmPassword:
+      activeTab.value === 'register'
+        ?[
+          {required:true, message:'请再次输入密码', trigger: 'blur'},
+          {
+            validator: (_rule, value: string, callback) => {
+              if (value !== form.password) callback(new Error('两次输入的密码不一致'))
+              else callback()
+            },
+            trigger: 'blur',
+          },
+        ]
+      :[],
+}))
 
-// 切换登录 / 注册时，清掉上一次的红字
-function handleTabChange() {
+function handleTabChange(){
   formRef.value?.clearValidate()
 }
 
-async function handleSubmit() {
-  // 校验通过返回 true，不通过会 reject，这里 catch 成 false
+async function handleSubmit(){
   const valid = await formRef.value?.validate().catch(() => false)
-  if (!valid) return
-
-  // 注册时才检查两次密码是否一致
-  if (activeTab.value === 'register' && form.password !== form.confirmPassword) {
-    ElMessage.error('两次输入的密码不一致')
-    return
-  }
+  if(!valid) return
 
   loading.value = true
   try {
-    // USE_MOCK 开着的时候，api 层内部走假数据；关掉就走真后端，这一页不用改
-    const params = {
-      studentId: form.studentId,
-      password: form.password,
-      role: form.role,
+    if(activeTab.value === "register"){
+      const res = await register({
+        studentId: form.studentId,
+        password: form.password,
+        role: form.role
+      })
+      await ElMessageBox.alert(`注册成功，你好, ${res.name}!`, '提示', {type:'success'})
+      form.password = ''
+      form.confirmPassword = ''
+      activeTab.value = 'login'
+      return
     }
-    const res = activeTab.value === 'register' ? await register(params) : await login(params)
 
+    const res = await login({
+      studentId:form.studentId,
+      password:form.password
+    })
     userStore.setLogin(res)
-    ElMessage.success(activeTab.value === 'register' ? '注册成功，已自动登录' : '登录成功')
-
-    // 之前在守卫里记下的 redirect，登录完送回去
-    const redirect = (route.query.redirect as string) || (res.role === 'admin' ? '/admin' : '/')
+    try{
+      const me = await getMyProfile()
+      syncThemeFromServer(me.theme)
+    } catch{
+      //未拉到资料时先使用本地缓存的内容
+    }
+    ElMessage.success(`登录成功，你好, ${res.username}!`)
+    const redirect = (route.query.redirect as string) || (res.role === 'admin' ? '/admin': '/')
     router.push(redirect)
   } catch {
-    // 错误提示已经在 src/utils/request.ts 的响应拦截器里统一弹过了，这里不重复弹
+    //错误已经在src/utils/request.ts中处理过了，这里不需要再处理
   } finally {
     loading.value = false
   }

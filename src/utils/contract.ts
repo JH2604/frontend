@@ -386,8 +386,8 @@ export function describeRemind(
       return '私信已发送（对方没绑定手机号或邮箱，无法提醒）'
     case REMIND_REASON.DISABLED:
       return '私信已发送（对方关闭了提醒）'
-    case REMIND_REASON.RATE_LIMITED:
-      return '私信已发送（提醒太频繁，本次未提醒）'
+   case REMIND_REASON.RATE_LIMITED:
+  return '已提醒过对方，请耐心等待回复'
     default:
       return '私信已发送'
   }

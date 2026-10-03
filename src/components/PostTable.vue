@@ -113,7 +113,7 @@ const columns = computed<TableColumn[]>(() => [
   { label: '地点', width: 150, slot: 'location' },
   { label: '发布时间', width: 170, slot: 'createdAt' },
   { label: '状态', width: 100, slot: 'status' },
-  { label: '操作', width: 90, slot: 'action' },
+  { label: '操作', width: props.mine ? 280 : 90, slot: 'action' },
 ])
 
 async function fetchList() {
@@ -171,15 +171,16 @@ async function handleToggleStatus(row: ItemBrief)
     row.status = res.status
     row.closedAt = res.closedAt
     ElMessage.success(`已${actionText}`)
-    if (query.status !== 'all')fetchList()
+    if (query.status !== 'all') fetchList()
   } catch {
     // 错误提示已经在 utils/request.ts 的拦截器里统一弹
+  }
 }
 
 async function handleDeleteRow(row: ItemBrief) {
   try {
     await ElMessageBox.confirm(
-      `确定要删除「${row.title}」吗？删掉就找不回来了O......`,
+      `确定要删除「${row.title}」吗？删掉就找不回来了。`,
       '删除确认',
       { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
     )
@@ -245,10 +246,10 @@ onActivated(() => {
         </el-select>
       </el-form-item>
 
-      <el-form-item label="排序">
-        <el-select v-model="query.order" style="width: 100px" @change="handleSearch">
-          <el-option label="发布时间降序" value="desc" />
-          <el-option label="发布时间升序" value="asc" />
+      <el-form-item v-if="props.mine" label="排序">
+        <el-select v-model="query.order" style="width: 140px" @change="handleSearch">
+          <el-option label="最新在前" value="desc" />
+          <el-option label="最早在前" value="asc" />
         </el-select>
       </el-form-item>
 
@@ -280,6 +281,12 @@ onActivated(() => {
 
     <template #action="{ row }">
       <el-button link type="primary" @click="router.push(itemDetailPath(row.id))">详情</el-button>
+      <template v-if="props.mine">
+        <el-button link type="primary" @click="handleToggleStatus(row)">
+          {{ statusActionText(row.type, row.status) }}
+        </el-button>
+        <el-button link type="danger" @click="handleDeleteRow(row)">删除</el-button>
+      </template>
     </template>
   </PageTable>
 </template>

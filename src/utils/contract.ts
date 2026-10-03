@@ -670,10 +670,10 @@ export function nextStatus(status: 'open' | 'closed'): 'open' | 'closed' {
 }
 
 export function statusActionText(
-  status: 'open' | 'closed',
   type: 'lost' | 'found',
+  status: 'open' | 'closed',
 ): string {
-  const next = nextStatus(status)
+  const target = nextStatus(status)
   if (status === 'open') return `标记为${STATUS_TEXT[type][target]}`
   return `撤回为${STATUS_TEXT[type][target]}`
 }

@@ -9,6 +9,7 @@ import {
   MESSAGE_PAGE_SIZE_DEFAULT,
   itemDetailPath,
   messageChatPath,
+  userProfilePath,
 } from '@/utils/contract'
 import { formatDateTime, fromNow } from '@/utils/format'
 import { refreshUnread, setUnreadTotal } from '@/utils/unread'
@@ -164,7 +165,12 @@ onMounted(refreshUnread)
         :class="{ unread: row.direction === 'received' && !row.isRead }"
         @click="handleOpen(row)"
       >
-        <el-avatar :size="40" :src="row.peer.avatarUrl">
+        <el-avatar
+          :size="40"
+          :src="row.peer.avatarUrl"
+          class="peer-avatar"
+          @click.stop="router.push(userProfilePath(row.peer.id))"
+        >
           {{ row.peer.name.slice(0, 1) }}
         </el-avatar>
 
@@ -241,6 +247,12 @@ onMounted(refreshUnread)
 
 .item + .item {
   border-top: 1px solid #f0f2f5;
+}
+
+/* 头像是可点的（进用户主页 U6），给个手型让这个交互被发现 */
+.peer-avatar {
+  cursor: pointer;
+  flex-shrink: 0;
 }
 
 .body {

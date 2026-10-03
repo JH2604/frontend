@@ -54,6 +54,25 @@ const router = createRouter({
           name: 'conversation',
           component: () => import('@/views/user/Conversation.vue'),
         },
+        // 用户主页（U6 查看发帖人信息）。
+        // 点帖子/消息/管理员列表里的头像都会进这里。
+        {
+          path: 'users/:id',
+          name: 'user-profile',
+          component: () => import('@/views/user/UserProfile.vue'),
+        },
+        // 用户中心（U1 展示 + U2 改资料 + U3 改密码 + U4/U5 绑联系方式）
+        {
+          path: 'settings',
+          name: 'settings',
+          component: () => import('@/views/user/Settings.vue'),
+        },
+        // 联系管理员（U7）
+        {
+          path: 'admins',
+          name: 'admins',
+          component: () => import('@/views/user/Admins.vue'),
+        },
       ],
     },
 

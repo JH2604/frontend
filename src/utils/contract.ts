@@ -180,6 +180,14 @@ export const STORAGE_KEYS = {
    *   光有姓名不行 —— 重名是存在的；光有令牌也不行 —— 令牌里的 id 不一定解得出。
    */
   userId: 'user_id',
+  /**
+   * 主题偏好（契约 1.7：light / dark / system）。
+   *
+   * 为什么存在本地？契约 U2 的原话是
+   * "主题切换建议前端先改本地状态并立即生效，再异步调用本接口保存"。
+   * 本地存一份，刷新页面时就不会先亮一下再变暗（闪烁）。
+   */
+  theme: 'theme',
 } as const
 
 // ────────────────────────────────────────────────
@@ -367,11 +375,127 @@ export const ROUTE_HOME = '/'
 export const ROUTE_MY_POSTS = '/my-posts'
 export const ROUTE_PUBLISH = '/publish'
 export const ROUTE_MESSAGES = '/messages'
+export const ROUTE_SETTINGS = '/settings'
+export const ROUTE_ADMINS = '/admins'
 export const ROUTE_ADMIN_ITEMS = '/admin/items'
 
 export function itemDetailPath(id: number | string): string {
   return `/items/${id}`
 }
+
+/** 某个人的主页（U6 查看发帖人信息） */
+export function userProfilePath(userId: number | string): string {
+  return `/users/${userId}`
+}
+
+// ────────────────────────────────────────────────
+// 16. 用户模块（v1.1 文档 3 章，U1~U7）
+// ────────────────────────────────────────────────
+export const API_USERS_ME_PATH = '/users/me'
+export const API_USERS_PASSWORD_PATH = '/users/me/password'
+export const API_USERS_CONTACT_PATH = '/users/me/contact'
+export const API_USERS_ADMINS_PATH = '/users/admins'
+export const API_VERIFICATION_CODES_PATH = '/verification-codes'
+
+/**
+ * 联系方式渠道（v1.1 新增的枚举，用在下标 U4 / U5）。
+ *
+ * ⚠️ v1.0 是"邮箱专用"的（U4 发邮箱验证码、U5 绑定邮箱，字段就叫 `email`）；
+ *    v1.1 把手机号也并进来了，所以改成了 `channel` + `target` 两个通用字段。
+ *    照 v1.0 写会变成 PUT /users/me/email —— 那个路径已经不存在了。
+ */
+export const ContactChannel = {
+  SMS: 'sms',
+  EMAIL: 'email',
+} as const
+
+export type ContactChannelValue = (typeof ContactChannel)[keyof typeof ContactChannel]
+
+/** U4 请求体字段名 */
+export const VERIFICATION_CODE_FIELDS = {
+  channel: 'channel',
+  target: 'target',
+  scene: 'scene',
+} as const
+
+/** U5 请求体字段名（和 U4 的 target 必须一致） */
+export const CONTACT_FIELDS = {
+  channel: 'channel',
+  target: 'target',
+  code: 'code',
+} as const
+
+/**
+ * 验证码的用途（契约里的 `scene`）。
+ * 我们只用 `bind_contact`（绑定/修改手机号或邮箱）；
+ * `reset_password` 是"忘记密码"预留的，契约明确说"需要时再加一个重置接口"。
+ */
+export const VERIFICATION_SCENE = {
+  BIND_CONTACT: 'bind_contact',
+} as const
+
+/** U3 请求体字段名 */
+export const PASSWORD_FIELDS = {
+  oldPassword: 'old_password',
+  newPassword: 'new_password',
+} as const
+
+/** U2 请求体字段名（只有这三个可以改） */
+export const PROFILE_UPDATE_FIELDS = {
+  avatarUrl: 'avatar_url',
+  theme: 'theme',
+  allowRemind: 'allow_remind',
+} as const
+
+/** 头像上传的大小上限（契约 F1：avatar ≤2MB / post ≤5MB） */
+export const AVATAR_MAX_MB = 2
+
+/** 验证码的长度（契约 U5 写的是"6 位验证码"） */
+export const VERIFICATION_CODE_LENGTH = 6
+
+/**
+ * 手机号 / 邮箱打码（契约 U1 的说明："本人可以看到完整值；
+ * 前端展示时打码（如 `138****5678`）"）。
+ *
+ * ⚠️ 注意契约这句话有两层意思：
+ *   1. **后端给的是完整值**（本人视角），打码是**前端展示**的事；
+ *   2. 所以这里只影响"显示"，判断逻辑（比如"是否已绑定"）要用原始值。
+ *      如果把打码后的字符串当成数据去用，就会出现
+ *      "明明绑定了却因为长度判断错误显示成未绑定"。
+ */
+export function maskPhone(phone: string | null | undefined): string {
+  if (!phone) return ''
+  // 11 位手机号：保留前 3 后 4
+  if (phone.length === 11) return `${phone.slice(0, 3)}****${phone.slice(7)}`
+  // 其他长度就保守处理：少于 7 位全打码，否则留住头尾
+  if (phone.length <= 7) return '*'.repeat(phone.length)
+  return `${phone.slice(0, 3)}****${phone.slice(-2)}`
+}
+
+export function maskEmail(email: string | null | undefined): string {
+  if (!email) return ''
+  const at = email.indexOf('@')
+  // 没有 @ 就不是邮箱，全打码（免得把奇怪的字符串原样显示出来）
+  if (at <= 0) return '*'.repeat(email.length)
+  const name = email.slice(0, at)
+  const domain = email.slice(at)
+  if (name.length <= 2) return `${name.slice(0, 1)}***${domain}`
+  return `${name.slice(0, 2)}***${domain}`
+}
+
+/**
+ * 密码规则（契约 A1 说"规则同注册"，所以我们沿用登录页的提示：
+ * 8~32 位，含字母和数字）。这里给前端做即时校验 + 提示文案。
+ */
+export const PASSWORD_MIN = 8
+export const PASSWORD_MAX = 32
+export const PASSWORD_RULE_TEXT = `${PASSWORD_MIN}~${PASSWORD_MAX} 位，需同时包含字母和数字`
+
+export function isValidPassword(pwd: string): boolean {
+  if (pwd.length < PASSWORD_MIN || pwd.length > PASSWORD_MAX) return false
+  return /[A-Za-z]/.test(pwd) && /\d/.test(pwd)
+}
+
 
 /** 某个人的私信聊天页（M3 私信记录） */
 export function messageChatPath(peerId: number | string): string {

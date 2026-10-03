@@ -4,6 +4,8 @@ import type {
   ItemType,
   MarkReadPayload,
   MessageQuery,
+  RawAdminContact,
+  RawContactResult,
   RawConversation,
   RawMarkRead,
   RawMessageBrief,
@@ -13,6 +15,7 @@ import type {
   RawPostPage,
   RawSendMessage,
   RawStatusPatch,
+  RawUserMe,
   RawUserProfile,
   ConversationQuery,
   CreateItemPayload,
@@ -786,4 +789,177 @@ export function mockGetUserProfile(
         }
       : null,
   }
+}
+
+// =====================================================================
+// 用户模块假数据（v1.1 文档第 3 章，U1~U5 + U7）
+//
+// ⚠️ U1（我自己）和 U6（看别人）是**两个不同的接口、两份不同的数据**：
+//    U1 返回手机号/邮箱的【完整值】（本人视角），有 theme、created_at
+//    U6 返回的东西由后端按角色遮蔽（普通用户 detail=null）
+//    共用一个变量、共用一个类型，将来后端一改遮蔽规则就会两边一起错。
+//    C++ 类比：两个都叫 User 的 struct，一个含敏感字段、一个不含。
+//
+// ⚠️ 这个文件里的 meProfile 是**可变的**（U2/U5 会改它），
+//    这样"改完资料再刷新页面，值还在"这件事在 mock 下也能演示。
+// =====================================================================
+
+/** 当前登录用户（U1）的假数据。U2 改资料、U5 绑联系方式都会改它。 */
+const meProfile: RawUserMe = {
+  id: MOCK_ME_ID,
+  student_id: '202301010101',
+  name: '张三',
+  avatar_url: 'https://cdn.example.com/avatar/1001.png',
+  role: 'student',
+  phone: '13812345678',
+  email: 'zhangsan@example.com',
+  allow_remind: true,
+  theme: 'system',
+  post_count: 2,
+  created_at: '2026-09-01T10:00:00+08:00',
+}
+
+/**
+ * 假后端记下"给谁发过验证码"。
+ *
+ * 为什么需要它？因为契约 U5 明确要求
+ * 「`target` 必须和 U4 发送验证码时一致」——
+ * 假后端如果完全不校验，前端漏了这个约束就测不出来。
+ * 真后端会校验，所以假后端也得模拟。
+ */
+let pendingCode: { channel: string; target: string; code: string } | null = null
+
+/** U1 获取当前用户信息 */
+export function mockGetMe(): RawUserMe {
+  return { ...meProfile }
+}
+
+/**
+ * U2 修改个人资料。
+ * 契约：只改传了的字段，没传的保持不变；name / student_id / role 不允许改。
+ */
+export function mockUpdateMe(payload: {
+  avatarUrl?: string
+  theme?: string
+  allowRemind?: boolean
+}): RawUserMe {
+  if (payload.avatarUrl !== undefined) meProfile.avatar_url = payload.avatarUrl
+  if (payload.theme !== undefined) meProfile.theme = payload.theme
+  if (payload.allowRemind !== undefined) meProfile.allow_remind = payload.allowRemind
+  // 注意：故意不处理 name / student_id / role —— 契约说"传了会被忽略"，
+  // 假后端也照这个行为做（而不是报错），这样前端拿假数据测时行为一致。
+  return { ...meProfile }
+}
+
+/**
+ * 假后端里记着的当前密码。
+ * ⚠️ 用 let 而不是 const：改了密码之后它要跟着变，
+ *    否则第二次改密码时新密码会被当成"原密码"从而判错。
+ */
+let MOCK_CURRENT_PASSWORD = 'abc12345'
+
+/**
+ * U3 修改密码。
+ *
+ * 假后端要做两件真后端会做的事：
+ *   1. 校验原密码（契约：400 / 40002 原密码错误）
+ *   2. 校验新密码格式（契约：400 / 40000 新密码格式不合法）
+ * 这样界面上"原密码错了要给红字"这条才测得到。
+ */
+export function mockChangePassword(payload: {
+  oldPassword: string
+  newPassword: string
+}): void {
+  if (payload.oldPassword !== MOCK_CURRENT_PASSWORD) {
+    throw new Error('原密码错误')
+  }
+  if (!MOCK_PASSWORD_OK(payload.newPassword)) {
+    throw new Error('新密码格式不合法')
+  }
+  // 记住新密码，模拟真后端的持久化
+  MOCK_CURRENT_PASSWORD = payload.newPassword
+}
+
+/** 密码规则：8~32 位且同时含字母和数字（和 contract.ts 的 isValidPassword 同一套） */
+function MOCK_PASSWORD_OK(pwd: string): boolean {
+  if (pwd.length < 8 || pwd.length > 32) return false
+  return /[A-Za-z]/.test(pwd) && /\d/.test(pwd)
+}
+
+/**
+ * U4 发送验证码。
+ *
+ * 假实现：把 target 记下来，并且**固定用 123456 作验证码**（方便你在界面上试）。
+ * 真实项目里验证码当然不会告诉前端 —— 这里只是个便于演示的假后端。
+ */
+export function mockSendCode(payload: { channel: string; target: string }): void {
+  if (!payload.target) throw new Error('手机号或邮箱不能为空')
+  // 简单的格式校验，模拟契约里的 400 / 40000
+  if (payload.channel === 'sms' && !/^\d{11}$/.test(payload.target)) {
+    throw new Error('手机号格式不正确')
+  }
+  if (payload.channel === 'email' && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(payload.target)) {
+    throw new Error('邮箱格式不正确')
+  }
+
+  pendingCode = { channel: payload.channel, target: payload.target, code: '123456' }
+}
+
+/**
+ * U5 绑定 / 修改手机号或邮箱。
+ *
+ * 假后端照契约校验三件事：
+ *   1. 必须先发过验证码（U4）
+ *   2. target 必须和发验证码时一致
+ *   3. 验证码必须对
+ */
+export function mockBindContact(payload: {
+  channel: string
+  target: string
+  code: string
+}): RawContactResult {
+  if (!pendingCode) {
+    throw new Error('请先获取验证码')
+  }
+  if (pendingCode.channel !== payload.channel || pendingCode.target !== payload.target) {
+    throw new Error('手机号或邮箱和获取验证码时不一致')
+  }
+  if (pendingCode.code !== payload.code) {
+    throw new Error('验证码错误或已过期')
+  }
+
+  // 绑定成功：写进 meProfile，并清掉这次验证码（真后端也是一次性的）
+  if (payload.channel === 'sms') meProfile.phone = payload.target
+  if (payload.channel === 'email') meProfile.email = payload.target
+  pendingCode = null
+
+  return { phone: meProfile.phone ?? null, email: meProfile.email ?? null }
+}
+
+/**
+ * U7 管理员列表（联系管理员）。
+ *
+ * 假数据里放两个管理员，其中一个**没有公开邮箱** ——
+ * 用来演示"没邮箱时只显示私信按钮"的分支（前端不该给一个点了没用的 mailto）。
+ */
+export function mockListAdmins(): RawAdminContact[] {
+  return [
+    {
+      id: MOCK_ADMIN_ID,
+      name: '王老师',
+      avatar_url: `https://cdn.example.com/avatar/${MOCK_ADMIN_ID}.png`,
+      role: 'admin',
+      email: 'teacher.wang@example.com',
+      can_message: true,
+    },
+    {
+      id: MOCK_PEER_ADMIN,
+      name: '李老师',
+      avatar_url: `https://cdn.example.com/avatar/${MOCK_PEER_ADMIN}.png`,
+      role: 'admin',
+      // 故意不给邮箱：用来演示"没有公开邮箱"这个分支
+      email: null,
+      can_message: true,
+    },
+  ]
 }

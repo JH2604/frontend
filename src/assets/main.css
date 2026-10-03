@@ -46,3 +46,35 @@ body {
   background: var(--color-bg);
   color: var(--color-text);
 }
+
+/* ===== 暗色主题（契约 1.7 的 theme = dark）=====
+   只做一件事：把上面那套自定义设计令牌换成暗色值。
+
+   为什么不用逐组件改样式？因为 Element Plus 的暗色是靠
+   `html.dark` + `element-plus/theme-chalk/dark/css-vars.css` 实现的
+   （那个文件在 main.ts 里 import 了），它会自动把所有 --el-* 变量换掉。
+   我们只要让自己的几个 --color-* 变量跟着换，全站就一致了。
+   C++ 类比：换一整套全局常量表，而不是每个用到的地方都改一遍。 */
+html.dark {
+  --color-bg: #141414;
+  --color-card: #1d1e1f;
+  --color-text: #e5eaf3;
+  --color-sub: #a3a6ad;
+  --color-line: #363637;
+  --color-primary: #4b83ff;
+  --color-lost: #f56c6c;
+  --color-found: #3fbf8f;
+}
+
+/* 暗色下 element-plus 的卡片/表格底色也跟着走令牌，避免出现"白块" */
+html.dark .el-card {
+  background: var(--color-card);
+  border-color: var(--color-line);
+}
+
+/* 我们自己写的几处硬编码浅色（比如聊天区和未读高亮）在暗色下要压暗，
+   否则会有刺眼的白底。用 :where() 保持优先级最低，方便组件内覆盖。 */
+html.dark :where(.scroller, .item.unread, .item:hover) {
+  background: #232324;
+}
+

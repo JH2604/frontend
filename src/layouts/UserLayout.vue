@@ -5,11 +5,14 @@ import { useUserStore } from '@/stores/user'
 import { logoutApi } from '@/api/auth'
 import { unreadTotal, refreshUnread } from '@/utils/unread'
 import {
+  ROUTE_ADMINS,
   ROUTE_HOME,
   ROUTE_LOGIN,
   ROUTE_MESSAGES,
   ROUTE_MY_POSTS,
   ROUTE_PUBLISH,
+  ROUTE_SETTINGS,
+  userProfilePath,
 } from '@/utils/contract'
 
 const router = useRouter()
@@ -17,6 +20,12 @@ const userStore = useUserStore()
 
 const goPublish = () => {
   router.push(ROUTE_PUBLISH)
+}
+
+/** 点自己的头像 / 用户名 -> 自己的用户主页（U6） */
+const goMyProfile = () => {
+  if (!userStore.userId) return
+  router.push(userProfilePath(userStore.userId))
 }
 
 const logout = async () => {
@@ -88,9 +97,17 @@ onUnmounted(() => {
             class="badge"
           />
         </el-menu-item>
+        <el-menu-item :index="ROUTE_ADMINS">联系管理员</el-menu-item>
+        <el-menu-item :index="ROUTE_SETTINGS">用户中心</el-menu-item>
       </el-menu>
 
-      <span v-if="userStore.isLogin" class="username">{{ userStore.username }}</span>
+      <!-- 用户名点一下进自己的主页（U6）—— 这是"点头像看用户信息"最自然的入口 -->
+      <span v-if="userStore.isLogin" class="username-wrap">
+        <el-avatar :size="28" class="user-avatar" @click="goMyProfile">
+          {{ userStore.username.slice(0, 1) }}
+        </el-avatar>
+        <el-button link @click="goMyProfile">{{ userStore.username }}</el-button>
+      </span>
       <el-button v-if="userStore.isLogin" link @click="logout">退出</el-button>
       <el-button v-else link @click="router.push(ROUTE_LOGIN)">登录</el-button>
       <el-button type="primary" @click="goPublish">发布信息</el-button>
@@ -139,6 +156,16 @@ onUnmounted(() => {
 .badge {
   margin-left: 6px;
   margin-top: -2px;
+}
+
+.username-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.user-avatar {
+  cursor: pointer;
 }
 
 .username {

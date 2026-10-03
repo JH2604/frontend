@@ -1,4 +1,4 @@
-import type { RoleValue } from '@/utils/contract'
+import type { ContactChannelValue, RoleValue } from '@/utils/contract'
 
 // ===== 统一返回体（文档 1.4）=====
 // 提示字段文档里叫 message，群里 10/1 拍板叫 msg，两个都留着可选，
@@ -489,6 +489,111 @@ export interface RawUserProfile {
   can_message?: boolean | null
   can_remind?: boolean | null
   detail?: RawUserDetail | null
+}
+
+// =====================================================================
+// 我的信息（U1）+ 个人资料修改（U2）+ 密码（U3）+ 联系方式（U4/U5）+ 管理员列表（U7）
+// =====================================================================
+
+/**
+ * U1 `GET /users/me` —— **当前登录用户自己**的完整信息。
+ *
+ * ⚠️ 它和 U6 的 `UserProfile` 长得像，但**不是一回事**，别合并：
+ *   U1：本人的信息，手机号/邮箱是**完整值**，有 theme、created_at，没有 can_message
+ *   U6：看**别人**的信息，contact 由后端按角色遮蔽，有 can_message / detail
+ *   混用的话，U6 的映射函数会把"本人完整手机号"当成"别人的公开信息"处理，
+ *   将来后端一改遮蔽规则，两边一起错。
+ *   C++ 类比：两个都叫 User 的 struct，一个含敏感字段、一个不含，不该用同一个类型。
+ */
+export interface UserMe {
+  id: number
+  studentId: string
+  name: string
+  avatarUrl: string
+  role: RoleValue
+  /** 未绑定为 null */
+  phone: string | null
+  /** 未绑定为 null */
+  email: string | null
+  /** 是否允许别人给我发私信时通过短信/邮件提醒我 */
+  allowRemind: boolean
+  theme: Theme
+  postCount: number
+  createdAt: string
+}
+
+/** U2 `PATCH /users/me` 的入参：只有这三个能改 */
+export interface UpdateMePayload {
+  avatarUrl?: string
+  theme?: Theme
+  allowRemind?: boolean
+}
+
+/** U4 `POST /verification-codes` 的入参 */
+export interface SendCodePayload {
+  channel: ContactChannelValue
+  /** 手机号（11 位）或邮箱地址 */
+  target: string
+}
+
+/** U5 `PUT /users/me/contact` 的入参。注意 target 必须和 U4 时一致 */
+export interface BindContactPayload {
+  channel: ContactChannelValue
+  target: string
+  code: string
+}
+
+/** U5 的返回：绑定后最新的手机号 / 邮箱 */
+export interface ContactResult {
+  phone: string | null
+  email: string | null
+}
+
+/** U3 `PUT /users/me/password` 的入参 */
+export interface ChangePasswordPayload {
+  oldPassword: string
+  newPassword: string
+}
+
+/** U7 `GET /users/admins` 的列表项 */
+export interface AdminContact {
+  id: number
+  name: string
+  avatarUrl: string
+  role: RoleValue
+  /** 管理员对外公开的工作邮箱，用来做 mailto: 链接 */
+  email: string | null
+  canMessage: boolean
+}
+
+// ---- 原始形状 ----
+
+export interface RawUserMe {
+  id?: number | null
+  student_id?: string | null
+  name?: string | null
+  avatar_url?: string | null
+  role?: string | null
+  phone?: string | null
+  email?: string | null
+  allow_remind?: boolean | null
+  theme?: string | null
+  post_count?: number | null
+  created_at?: string | null
+}
+
+export interface RawContactResult {
+  phone?: string | null
+  email?: string | null
+}
+
+export interface RawAdminContact {
+  id?: number | null
+  name?: string | null
+  avatar_url?: string | null
+  role?: string | null
+  email?: string | null
+  can_message?: boolean | null
 }
 
 // =====================================================================

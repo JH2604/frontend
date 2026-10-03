@@ -10,6 +10,7 @@ import {
   MESSAGE_PAGE_SIZE_DEFAULT,
   ROUTE_MESSAGES,
   describeRemind,
+  userProfilePath,
 } from '@/utils/contract'
 import { formatDateTime, fromNow } from '@/utils/format'
 import { setUnreadTotal } from '@/utils/unread'
@@ -216,8 +217,17 @@ onMounted(fetchConversation)
       <div class="head">
         <el-button link @click="router.push(ROUTE_MESSAGES)">← 返回消息列表</el-button>
         <template v-if="peer">
-          <el-avatar :size="32" :src="peer.avatarUrl">{{ peer.name.slice(0, 1) }}</el-avatar>
-          <span class="name">{{ peer.name }}</span>
+          <el-avatar
+            :size="32"
+            :src="peer.avatarUrl"
+            class="peer-avatar"
+            @click="router.push(userProfilePath(peer.id))"
+          >
+            {{ peer.name.slice(0, 1) }}
+          </el-avatar>
+          <span class="name clickable" @click="router.push(userProfilePath(peer.id))">
+            {{ peer.name }}
+          </span>
         </template>
       </div>
     </template>
@@ -293,6 +303,14 @@ onMounted(fetchConversation)
 
 .name {
   font-weight: 600;
+}
+
+.clickable {
+  cursor: pointer;
+}
+
+.peer-avatar {
+  cursor: pointer;
 }
 
 .scroller {

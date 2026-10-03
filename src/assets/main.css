@@ -14,10 +14,6 @@ body {
   font-family: -apple-system, 'Segoe UI', 'Microsoft YaHei', sans-serif;
 }
 
-/* ===== 设计令牌（design token）=====
-   配色直接取自组长给的手机原型（index.html 第 7-18 行的 CSS 变量），
-   这样 web 端和产品给的手机端是同一套视觉语言。
-   用 CSS 变量的好处：改一处，全站生效。 */
 :root {
   --color-bg: #f4f5f7;
   --color-card: #ffffff;
@@ -30,9 +26,6 @@ body {
   --radius-card: 12px;
 }
 
-/* 把上面的配色注入 Element Plus 的主题系统。
-   只改这几个变量，全站所有按钮/链接/选中态/标签的颜色就统一了，
-   不需要去覆盖组件的具体样式类。 */
 :root {
   --el-color-primary: var(--color-primary);
   --el-color-danger: var(--color-lost);
@@ -47,14 +40,6 @@ body {
   color: var(--color-text);
 }
 
-/* ===== 暗色主题（契约 1.7 的 theme = dark）=====
-   只做一件事：把上面那套自定义设计令牌换成暗色值。
-
-   为什么不用逐组件改样式？因为 Element Plus 的暗色是靠
-   `html.dark` + `element-plus/theme-chalk/dark/css-vars.css` 实现的
-   （那个文件在 main.ts 里 import 了），它会自动把所有 --el-* 变量换掉。
-   我们只要让自己的几个 --color-* 变量跟着换，全站就一致了。
-   C++ 类比：换一整套全局常量表，而不是每个用到的地方都改一遍。 */
 html.dark {
   --color-bg: #141414;
   --color-card: #1d1e1f;
@@ -72,9 +57,6 @@ html.dark .el-card {
   border-color: var(--color-line);
 }
 
-/* 我们自己写的几处硬编码浅色（比如聊天区和未读高亮）在暗色下要压暗，
-   否则会有刺眼的白底。用 :where() 保持优先级最低，方便组件内覆盖。 */
 html.dark :where(.scroller, .item.unread, .item:hover) {
   background: #232324;
 }
-

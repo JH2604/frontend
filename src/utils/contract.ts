@@ -663,3 +663,17 @@ export const STATUS_TEXT = {
   lost: { open: '未找到', closed: '已找到' },
   found: { open: '待认领', closed: '已认领' },
 } as const
+
+
+export function nextStatus(status: 'open' | 'closed'): 'open' | 'closed' {
+  return status === 'open' ? 'closed' : 'open'
+}
+
+export function statusActionText(
+  status: 'open' | 'closed',
+  type: 'lost' | 'found',
+): string {
+  const next = nextStatus(status)
+  if (status === 'open') return `标记为${STATUS_TEXT[type][target]}`
+  return `撤回为${STATUS_TEXT[type][target]}`
+}

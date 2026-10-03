@@ -37,16 +37,21 @@
 // 每个格子里的内容由插槽决定（本文件在模板里给了 #type / #status / ...）。
 //
 
-import { onActivated, onMounted, reactive, ref } from 'vue'
+import { computed, onActivated, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import type { ItemBrief, ItemStatus, ItemType } from '@/types/api'
 import type { TableColumn } from '@/types/table'
-import { getItemList } from '@/api/item'
+import { deleteItem, getItemList, updateItemStatus } from '@/api/item'
 import PageTable from '@/components/PageTable.vue'
 import StatusTag from '@/components/StatusTag.vue'
-import { PAGE_SIZE_DEFAULT, itemDetailPath } from '@/utils/contract'
+import {
+  PAGE_SIZE_DEFAULT,
+  itemDetailPath,
+  nextStatus,
+  statusActionText,
+} from '@/utils/contract'
 import { formatDateTime, fromNow } from '@/utils/format'
-
 // =====================================================================
 // 帖子列表面板
 //
@@ -71,6 +76,7 @@ const query = reactive({
   keyword: '',
   type: 'all' as ItemType | 'all',
   status: 'all' as ItemStatus | 'all',
+  order: 'desc' as 'asc' | 'desc',
 })
 
 const typeOptions: { label: string; value: ItemType | 'all' }[] = [
@@ -101,14 +107,14 @@ const statusOptions: { label: string; value: ItemStatus | 'all' }[] = [
 
 // 一份列描述，PageTable 照着画表格。
 // 列只列契约 P1 真的会返回的字段，不要写 happenTime / category 这些不存在的。
-const columns: TableColumn[] = [
+const columns = computed<TableColumn[]>(() => [
   { prop: 'title', label: '标题', minWidth: 180 },
   { label: '类型', width: 90, slot: 'type' },
   { label: '地点', width: 150, slot: 'location' },
   { label: '发布时间', width: 170, slot: 'createdAt' },
   { label: '状态', width: 100, slot: 'status' },
   { label: '操作', width: 90, slot: 'action' },
-]
+])
 
 async function fetchList() {
   loading.value = true
@@ -119,7 +125,7 @@ async function fetchList() {
       keyword: query.keyword,
       type: query.type,
       status: query.status,
-      order: 'desc',
+      order: query.order,
       // mine 为 true 时后端只返回"我发布的"（文档 P1 的 mine 参数）
       mine: props.mine,
     })
@@ -144,8 +150,52 @@ function handleReset() {
   query.keyword = ''
   query.type = 'all'
   query.status = 'all'
+  query.order = 'desc'
   handleSearch()
 }
+async function handleToggleStatus(row: ItemBrief)
+{
+  const next =nextStatus(row.status)
+  const actionText = statusActionText(row.type, row.status)
+  try {
+    await ElMessageBox.confirm(`确定把「${row.title}」${actionText}吗？`, '确认',{
+      type: 'warning',
+      confirmButtonText: '确认',
+      cancelButtonText: '取消',
+    })
+  } catch{
+    return
+  }
+  try {
+    const res = await updateItemStatus(row.id, next)
+    row.status = res.status
+    row.closedAt = res.closedAt
+    ElMessage.success(`已${actionText}`)
+    if (query.status !== 'all')fetchList()
+  } catch {
+    // 错误提示已经在 utils/request.ts 的拦截器里统一弹
+}
+
+async function handleDeleteRow(row: ItemBrief) {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除「${row.title}」吗？删掉就找不回来了O......`,
+      '删除确认',
+      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  try {
+    await deleteItem(row.id)
+    ElMessage.success('已删除')
+    if (list.value.length === 1 && query.page > 1) query.page -= 1
+    fetchList()
+  } catch {
+    // 错误提示已经由拦截器弹出
+  }
+}
+
 
 onMounted(fetchList)
 
@@ -192,6 +242,13 @@ onActivated(() => {
       <el-form-item label="状态">
         <el-select v-model="query.status" style="width: 130px" @change="handleSearch">
           <el-option v-for="o in statusOptions" :key="o.value" :label="o.label" :value="o.value" />
+        </el-select>
+      </el-form-item>
+
+      <el-form-item label="排序">
+        <el-select v-model="query.order" style="width: 100px" @change="handleSearch">
+          <el-option label="发布时间降序" value="desc" />
+          <el-option label="发布时间升序" value="asc" />
         </el-select>
       </el-form-item>
 

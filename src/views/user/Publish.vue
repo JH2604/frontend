@@ -1,18 +1,20 @@
 <script setup lang="ts">
 
 import { reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
+import { onBeforeRouteLeave, useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import type { ItemType } from '@/types/api'
 import { createItem } from '@/api/item'
 import ImageUploader from '@/components/ImageUploader.vue'
-import { POST_CONTENT_MAX, POST_TITLE_MAX, ROUTE_HOME } from '@/utils/contract'
+import { POST_CONTENT_MAX, POST_TITLE_MAX, itemDetailPath } from '@/utils/contract'
 import { toIso } from '@/utils/format'
 
 const router = useRouter()
 
 const formRef = ref<FormInstance>()
 const loading = ref(false)
+const submitted = ref(false)
+const uploaderRef = ref<{ uploading: boolean }| null>(null)
 
 const form = reactive({
   type: 'lost' as ItemType,
@@ -36,29 +38,67 @@ const rules: FormRules = {
   locationName: [{ required: true, message: '请填写地点', trigger: 'blur' }],
 }
 
+function formDirty(){
+  return (
+    form.title.trim() !== '' ||
+    form.content.trim() !== '' ||
+    form.locationName.trim() !== '' ||
+    form.eventTime !== null ||
+    form.images.length > 0 
+  )
+}
 async function handleSubmit() {
-  // validate() 通过返回 true，不通过会 reject，这里 catch 成 false
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid) return
 
+  if (uploaderRef.value?.uploading) {
+    ElMessage.warning('图片还在上传，请稍候')
+    return
+  }
+
+  if (/1\d{10}/.test(form.content)) {
+    try {
+      await ElMessageBox.confirm(
+        '描述里好像有手机号。请不要填写联系方式，统一通过站内私信联系。仍要发布吗？',
+        '提示',
+        { type: 'warning', confirmButtonText: '仍要发布', cancelButtonText: '返回修改' },
+      )
+    } catch {
+      return
+    }
+  }
+
   loading.value = true
   try {
-    await createItem({
+    const created = await createItem({
       type: form.type,
       title: form.title,
       content: form.content,
       images: form.images,
       location: { name: form.locationName },
-      // 没填就是 null，api 层会直接不发这个字段
       eventTime: form.eventTime ? toIso(form.eventTime) : null,
     })
-
+    submitted.value = true
     ElMessage.success('发布成功')
-    router.push(ROUTE_HOME)
+    router.replace(itemDetailPath(created.id))
   } finally {
     loading.value = false
   }
 }
+
+onBeforeRouteLeave(async () => {
+  if (submitted.value || !formDirty()) return true
+  try {
+    await ElMessageBox.confirm('是否放弃编辑？', '离开确认', {
+      type: 'warning',
+      confirmButtonText: '放弃',
+      cancelButtonText: '继续编辑',
+    })
+    return true
+  } catch {
+    return false
+  }
+})
 </script>
 
 <template>
@@ -104,9 +144,15 @@ async function handleSubmit() {
           show-word-limit
         />
       </el-form-item>
+      <el-alert
+          type="info"
+          :closable="false"
+          title="请不要在描述里填写手机号等联系方式，统一通过站内私信联系"
+          show-icon
+        />
 
       <el-form-item label="图片">
-        <ImageUploader v-model="form.images" />
+        <ImageUploader ref="uploaderRef" v-model="form.images" />
       </el-form-item>
 
       <el-form-item>

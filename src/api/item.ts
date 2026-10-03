@@ -1,4 +1,5 @@
 import { http } from '@/utils/request'
+import {useUserStore} from '@/stores/user'
 import type {
   Author,
   CreateItemPayload,
@@ -268,7 +269,8 @@ export async function getItemList(params: ItemQuery): Promise<PageResult<ItemBri
 export async function getItemDetail(id: number): Promise<Item> {
   if (USE_MOCK) {
     await delay()
-    return toItem(mockGetItemDetail(id))
+    const userStore = useUserStore()
+    return toItem(mockGetItemDetail(id,userStore.isAdmin))
   }
   return toItem(await http<RawPost>({ url: postPath(id), method: 'get' }))
 }

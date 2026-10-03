@@ -201,29 +201,9 @@ export const STORAGE_KEYS = {
   role: 'role',
   /** 界面上显示的用户名 */
   username: 'username',
-  /**
-   * 当前登录用户的数字 id（登录响应 A2 里 user.id）。
-   *
-   * 为什么一定要存它？
-   *   评论的"能不能删"要靠它判断（契约 C3：本人能删自己的、管理员能删所有）。
-   *   光有姓名不行 —— 重名是存在的；光有令牌也不行 —— 令牌里的 id 不一定解得出。
-   */
   userId: 'user_id',
-  /**
-   * 主题偏好（契约 1.7：light / dark / system）。
-   *
-   * 为什么存在本地？契约 U2 的原话是
-   * "主题切换建议前端先改本地状态并立即生效，再异步调用本接口保存"。
-   * 本地存一份，刷新页面时就不会先亮一下再变暗（闪烁）。
-   */
   theme: 'theme',
 } as const
-
-// ────────────────────────────────────────────────
-// 6. 认证 / 用户相关的【接口】路径（文档 A1~A4、U1）
-//    ✅ 已确认（2026-10-02 群里通知 + 文档 A1~A4）
-//    注意：这里全部是"发给后端的接口地址"，不是浏览器地址栏里的页面地址。
-// ────────────────────────────────────────────────
 export const API_LOGIN_PATH = '/auth/login'
 export const API_REGISTER_PATH = '/auth/register'
 export const API_REFRESH_PATH = '/auth/refresh'
@@ -239,12 +219,6 @@ export const API_USERS_PATH = '/users'
 export function userPath(userId: number | string): string {
   return `${API_USERS_PATH}/${userId}`
 }
-
-// ⚠️⚠️ 这个和上面的 API_LOGIN_PATH 完全不是一回事，千万别混用：
-//    ROUTE_LOGIN    = 浏览器地址栏里的【前端页面】路径，用来跳转、判断"现在是不是登录页"
-//    API_LOGIN_PATH = 发给后端的【接口】地址，用来发登录请求
-//    混用的后果：forceLogout() 会把浏览器跳到 '/auth/login' —— 那是接口地址，
-//    前端路由表里根本没有，用户会看到一个空白页。
 export const ROUTE_LOGIN = '/login'
 
 // ────────────────────────────────────────────────

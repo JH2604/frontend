@@ -301,12 +301,8 @@ async function handleChangePassword() {
     ElMessage.success('密码已修改，请重新登录')
     userStore.logout()
     router.push(ROUTE_LOGIN)
-  } catch (err) {
-    // mock 模式下假后端抛的是普通 Error（"原密码错误"之类），这里弹出来；
-    // 真后端会返回 40002，拦截器已经弹过一次了，所以这里只在 mock 下补一句。
-    if (err instanceof Error && err.message && !err.message.includes('业务码')) {
-      ElMessage.error(err.message)
-    }
+  } catch {
+    // 错误提示已经由 mockFail（假后端）或 request.ts 拦截器（真后端）弹出
   } finally {
     pwdLoading.value = false
   }
@@ -334,8 +330,8 @@ async function handleSendCode() {
         countdownTimer = undefined
       }
     }, 1000)
-  } catch (err) {
-    if (err instanceof Error && err.message) ElMessage.error(err.message)
+  } catch {
+    // 错误提示已经由 mockFail（假后端）或 request.ts 拦截器（真后端）弹出
   } finally {
     sendingCode.value = false
   }
@@ -374,8 +370,8 @@ async function handleBindContact() {
     }
     contactForm.code = ''
     codeSent.value = false
-  } catch (err) {
-    if (err instanceof Error && err.message) ElMessage.error(err.message)
+  } catch {
+    // 错误提示已经由 mockFail（假后端）或 request.ts 拦截器（真后端）弹出
   } finally {
     bindingContact.value = false
   }

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 
-import { ref, watch } from 'vue'
+import { computed,ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { UploadRequestOptions, UploadUserFile } from 'element-plus'
 import { uploadFile } from '@/api/file'
@@ -25,6 +25,9 @@ const props = withDefaults(
 )
 
 const fileList = ref<UploadUserFile[]>([])
+const upLoading = computed(() => fileList.value.some((file) =>  file.status === 'uploading'))
+
+defineExpose({upLoading})
 
 async function doUpload(options: UploadRequestOptions) {
   const file = options.file
@@ -59,7 +62,7 @@ watch(
       list-type="picture-card"
       :limit="props.limit"
       :http-request="doUpload"
-      accept="image/*"
+      accept="image/jpeg,image/png,image/webp"
     >
       <span class="plus">+</span>
     </el-upload>

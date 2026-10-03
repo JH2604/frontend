@@ -51,7 +51,7 @@
 // 种子数据（seed）  一开始就摆在那里的初始数据
 // USE_MOCK  总开关（就在下面几十行）
 // =====================================================================
-
+import {ElMessage} from 'element-plus'
 import type {
   ItemQuery,
   ItemStatus,
@@ -75,7 +75,6 @@ import type {
   CreateItemPayload,
   SendMessagePayload,
 } from '@/types/api'
-import { ElMessage } from 'element-plus'
 
 // ===== 总开关 =====
 // 后端接口通了以后，把这里改成 false，全项目就切到真实接口
@@ -85,17 +84,10 @@ export const USE_MOCK = true
 export function delay(ms = 300) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
-
-/**
- * 假后端失败。
- * 真后端出错时由 request.ts 弹红字；假后端的 throw 不经过拦截器，
- * 所以这里先弹同样的红字再抛错，页面 catch 里不要再弹一次。
- */
-export function mockFail(message: string): never {
+export function mockFail (message: string): never {
   ElMessage.error(message)
-  throw new Error(message)
+  mockFail(message)
 }
-
 // ===== 假登录 / 假注册（文档 A1/A2）=====
 // 契约入参：{ student_id, password }（注册时还要 role）
 // 契约出参：{ access_token, refresh_token, user: { name, role, ... } }
@@ -320,7 +312,7 @@ export function mockGetItemDetail(id: number, viewerIsAdmin = false): RawPost {
   const found = posts.find((p) => p.id === id)
   if (!found) {
     // 真后端是 404 / 40400，这里抛错让页面走"没有找到这条信息"的分支
-    throw new Error('帖子不存在或已删除')
+    mockFail('帖子不存在或已删除')
   }
   return {
     ...found,
@@ -362,7 +354,7 @@ export function mockCreateItem(payload: CreateItemPayload): RawPost {
 // （v1.0 返回的是完整帖子详情，已作废 —— 页面也因此必须重新拉一次 P2）
 export function mockUpdateItemStatus(id: number, status: ItemStatus): RawStatusPatch {
   const found = posts.find((p) => p.id === id)
-  if (!found) throw new Error('帖子不存在或已删除')
+  if (!found) mockFail('帖子不存在或已删除')
 
   found.status = status
   // closed_at 跟着状态走：标记完结就记下时间，撤回就清空

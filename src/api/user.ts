@@ -38,7 +38,7 @@
 //   U5 路径从 /users/me/email 改成 /users/me/contact，
 //   body 从 {email, code} 改成 {channel, target, code}。
 // =====================================================================
-
+import { useUserStore } from '@/stores/user'
 import { http } from '@/utils/request'
 import type {
   AdminContact,
@@ -311,7 +311,8 @@ export async function bindContact(payload: BindContactPayload): Promise<ContactR
 export async function getUserProfile(userId: number): Promise<UserProfile> {
   if (USE_MOCK) {
     await delay(200)
-    return toUserProfile(mockGetUserProfile(userId))
+    const userStore = useUserStore()
+    return toUserProfile(mockGetUserProfile(userId,userStore.userId,userStore.isAdmin))
   }
   return toUserProfile(
     await http<RawUserProfile>({ url: userPath(userId), method: 'get' }),

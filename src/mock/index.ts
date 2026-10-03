@@ -75,6 +75,7 @@ import type {
   CreateItemPayload,
   SendMessagePayload,
 } from '@/types/api'
+import { ElMessage } from 'element-plus'
 
 // ===== 总开关 =====
 // 后端接口通了以后，把这里改成 false，全项目就切到真实接口
@@ -83,6 +84,16 @@ export const USE_MOCK = true
 // 模拟网络延迟，让 loading 动画看得见
 export function delay(ms = 300) {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/**
+ * 假后端失败。
+ * 真后端出错时由 request.ts 弹红字；假后端的 throw 不经过拦截器，
+ * 所以这里先弹同样的红字再抛错，页面 catch 里不要再弹一次。
+ */
+export function mockFail(message: string): never {
+  ElMessage.error(message)
+  throw new Error(message)
 }
 
 // ===== 假登录 / 假注册（文档 A1/A2）=====
@@ -925,10 +936,10 @@ export function mockChangePassword(payload: {
   newPassword: string
 }): void {
   if (payload.oldPassword !== MOCK_CURRENT_PASSWORD) {
-    throw new Error('原密码错误')
+    mockFail('原密码错误')
   }
   if (!MOCK_PASSWORD_OK(payload.newPassword)) {
-    throw new Error('新密码格式不合法')
+    mockFail('新密码格式不合法')
   }
   // 记住新密码，模拟真后端的持久化
   MOCK_CURRENT_PASSWORD = payload.newPassword
@@ -947,13 +958,13 @@ function MOCK_PASSWORD_OK(pwd: string): boolean {
  * 真实项目里验证码当然不会告诉前端 —— 这里只是个便于演示的假后端。
  */
 export function mockSendCode(payload: { channel: string; target: string }): void {
-  if (!payload.target) throw new Error('手机号或邮箱不能为空')
+  if (!payload.target) mockFail('手机号或邮箱不能为空')
   // 简单的格式校验，模拟契约里的 400 / 40000
   if (payload.channel === 'sms' && !/^\d{11}$/.test(payload.target)) {
-    throw new Error('手机号格式不正确')
+    mockFail('手机号格式不正确')
   }
   if (payload.channel === 'email' && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(payload.target)) {
-    throw new Error('邮箱格式不正确')
+    mockFail('邮箱格式不正确')
   }
 
   pendingCode = { channel: payload.channel, target: payload.target, code: '123456' }
@@ -973,13 +984,13 @@ export function mockBindContact(payload: {
   code: string
 }): RawContactResult {
   if (!pendingCode) {
-    throw new Error('请先获取验证码')
+    mockFail('请先获取验证码')
   }
   if (pendingCode.channel !== payload.channel || pendingCode.target !== payload.target) {
-    throw new Error('手机号或邮箱和获取验证码时不一致')
+    mockFail('手机号或邮箱和获取验证码时不一致')
   }
   if (pendingCode.code !== payload.code) {
-    throw new Error('验证码错误或已过期')
+    mockFail('验证码错误或已过期')
   }
 
   // 绑定成功：写进 meProfile，并清掉这次验证码（真后端也是一次性的）

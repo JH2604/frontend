@@ -205,10 +205,13 @@ async function handleDelete() {
   } catch {
     return
   }
-
-  await deleteItem(detail.value.id)
-  ElMessage.success('已删除')
-  router.push(ROUTE_HOME)
+  try{
+    await deleteItem(detail.value.id)
+    ElMessage.success('已删除')
+    router.push(ROUTE_HOME)
+  } catch{
+    // 错误提示已经在 utils/request.ts 的拦截器里统一弹过了，此处省略弹错误。
+  }
 }
 
 onMounted(fetchDetail)

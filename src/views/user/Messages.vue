@@ -5,12 +5,12 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import type { MessageBox, MessageBrief } from '@/types/api'
 import { getMessageList, markRead } from '@/api/message'
+import UserProfileDialog from '@/components/UserProfileDialog.vue'
 import { useUserStore } from '@/stores/user'
 import {
   MESSAGE_PAGE_SIZE_DEFAULT,
   itemDetailPath,
   messageChatPath,
-  userProfilePath,
 } from '@/utils/contract'
 import { formatDateTime, fromNow } from '@/utils/format'
 import { refreshUnread, setUnreadTotal } from '@/utils/unread'
@@ -23,6 +23,16 @@ const userStore = useUserStore()
 const loading = ref(false)
 const list = ref<MessageBrief[]>([])
 const total = ref(0)
+
+// ===== 对方资料弹窗（T11 / 契约 U6）=====
+// 点头像看对方资料；点整行才是进聊天页。两者靠 @click.stop 区分。
+const profileOpen = ref(false)
+const profileUserId = ref<number | null>(null)
+
+function handleOpenProfile(peerId: number) {
+  profileUserId.value = peerId
+  profileOpen.value = true
+}
 
 const query = reactive({
   page: 1,
@@ -152,11 +162,16 @@ onMounted(refreshUnread)
         :class="{ unread: row.direction === 'received' && !row.isRead }"
         @click="handleOpen(row)"
       >
+        <!--
+          头像：点一下弹出对方资料（T11 / U6）。
+          ⚠️ 必须 @click.stop —— 外层 .item 有 @click="handleOpen"（进聊天页），
+             不加 .stop 的话点头像会【同时】弹资料和跳进聊天页两件事都发生。
+        -->
         <el-avatar
           :size="40"
           :src="row.peer.avatarUrl"
           class="peer-avatar"
-          @click.stop="router.push(userProfilePath(row.peer.id))"
+          @click.stop="handleOpenProfile(row.peer.id)"
         >
           {{ row.peer.name.slice(0, 1) }}
         </el-avatar>
@@ -192,6 +207,9 @@ onMounted(refreshUnread)
       :total="total"
       @current-change="fetchList"
     />
+
+    <!-- 发帖人信息弹窗（U6 / T11）。整页共用一个实例 -->
+    <UserProfileDialog v-model="profileOpen" :user-id="profileUserId" />
   </el-card>
 </template>
 

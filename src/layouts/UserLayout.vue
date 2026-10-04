@@ -1,10 +1,9 @@
 <script setup lang="ts">
 
-import { onMounted, onUnmounted } from 'vue'
 import { RouterView, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { logoutApi } from '@/api/auth'
-import { unreadTotal, refreshUnread } from '@/utils/unread'
+import { unreadTotal, useUnreadPolling } from '@/utils/unread'
 import {
   ROUTE_ADMINS,
   ROUTE_HOME,
@@ -38,23 +37,10 @@ const logout = async () => {
   router.push(ROUTE_LOGIN)
 }
 
-let timer: number | undefined
-
-function handleVisible() {
-  // 只在"切回前台"时刷新；切到后台时什么都不做
-  if (document.visibilityState === 'visible') refreshUnread()
-}
-
-onMounted(() => {
-  refreshUnread()
-  timer = window.setInterval(refreshUnread, 30000)
-  document.addEventListener('visibilitychange', handleVisible)
-})
-
-onUnmounted(() => {
-  if (timer !== undefined) window.clearInterval(timer)
-  document.removeEventListener('visibilitychange', handleVisible)
-})
+// 未读私信小红点（契约 M1）。
+// 轮询逻辑统一放在 utils/unread.ts 的 useUnreadPolling() 里，
+// 管理端外壳（AdminLayout）也调同一个函数，两边只维护一份。
+useUnreadPolling()
 </script>
 
 <template>

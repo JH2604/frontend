@@ -8,6 +8,7 @@ import type { TableColumn } from '@/types/table'
 import { deleteItem, getItemList, updateItemStatus } from '@/api/item'
 import PageTable from '@/components/PageTable.vue'
 import StatusTag from '@/components/StatusTag.vue'
+import UserProfileDialog from '@/components/UserProfileDialog.vue'
 import {
   PAGE_SIZE_DEFAULT,
   itemDetailPath,
@@ -22,6 +23,20 @@ const router = useRouter()
 const loading = ref(false)
 const total = ref(0)
 const list = ref<ItemBrief[]>([])
+
+// ===== 发帖人信息弹窗（T11 / 契约 U6）=====
+// 列表里每一行都有发布人，点了弹出对应那位的资料。
+// 用两个 ref 记录"当前在看谁、从哪个帖子点的"，
+// 弹窗复用同一个实例（不用给每行都创建一个弹窗）。
+const profileOpen = ref(false)
+const profileUserId = ref<number | null>(null)
+const profilePostId = ref<number | undefined>(undefined)
+
+function handleOpenProfile(row: ItemBrief) {
+  profileUserId.value = row.author?.id ?? null
+  profilePostId.value = row.id
+  profileOpen.value = true
+}
 
 const query = reactive({
   page: 1,
@@ -48,6 +63,7 @@ const columns = computed<TableColumn[]>(() => [
   { prop: 'title', label: '标题', minWidth: 180 },
   { label: '类型', width: 90, slot: 'type' },
   { label: '地点', width: 150, slot: 'location' },
+  { label: '发布人', width: 140, slot: 'author' },
   { label: '发布时间', width: 170, slot: 'createdAt' },
   { label: '状态', width: 100, slot: 'status' },
   { label: '操作', width: props.mine ? 280 : 90, slot: 'action' },
@@ -201,6 +217,21 @@ onActivated(() => {
       {{ row.location?.name || '—' }}
     </template>
 
+    <!--
+      发布人：头像 + 姓名，点一下弹出资料（U6 / T11）。
+      ⚠️ 这里不用 @click.stop —— 因为整行本来就没有点击事件。
+         如果以后给行加了"点击进详情"，这句就要补上 .stop，
+         否则点头像会同时"弹资料"和"进详情"两件事。
+    -->
+    <template #author="{ row }">
+      <span class="author" @click="handleOpenProfile(row)">
+        <el-avatar :size="24" :src="row.author?.avatarUrl">
+          {{ (row.author?.name || '?').slice(0, 1) }}
+        </el-avatar>
+        <span class="author-name">{{ row.author?.name || '未知用户' }}</span>
+      </span>
+    </template>
+
     <template #createdAt="{ row }">
       <span :title="formatDateTime(row.createdAt)">{{ fromNow(row.createdAt) }}</span>
     </template>
@@ -219,4 +250,27 @@ onActivated(() => {
       </template>
     </template>
   </PageTable>
+
+  <!-- 发帖人信息弹窗（U6）。整张表共用一个实例 -->
+  <UserProfileDialog v-model="profileOpen" :user-id="profileUserId" :post-id="profilePostId" />
 </template>
+
+<style scoped>
+/* 发布人可点（弹资料），给个手型和悬停变色让这个交互被发现 */
+.author {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.author-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.author:hover .author-name {
+  color: var(--el-color-primary);
+}
+</style>

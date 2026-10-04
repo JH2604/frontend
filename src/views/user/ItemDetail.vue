@@ -8,6 +8,7 @@ import type { Item, ItemStatus, UserProfile } from '@/types/api'
 import { deleteItem, getItemDetail, updateItemStatus } from '@/api/item'
 import { getUserProfile } from '@/api/user'
 import StatusTag from '@/components/StatusTag.vue'
+import UserProfileDialog from '@/components/UserProfileDialog.vue'
 import { ROUTE_HOME, STATUS_TEXT, messageChatPath } from '@/utils/contract'
 import { formatDateTime, fromNow } from '@/utils/format'
 
@@ -19,6 +20,12 @@ const detail = ref<Item | null>(null)
 
 const authorProfile = ref<UserProfile | null>(null)
 const profileLoading = ref(false)
+
+// ===== 发帖人信息弹窗（T11 / 契约 U6）=====
+// 点"发布人"那一格弹出完整信息：学生看到公开信息，管理员多看到学号/手机/邮箱。
+// 显不显示那些敏感字段由**后端**决定（detail 为 null 就是不显示），
+// 前端不拿 isAdmin 去猜。
+const profileOpen = ref(false)
 
 /** U6 查发帖人的联系能力（拿到 canMessage / canRemind） */
 async function fetchAuthorProfile(authorId: number) {
@@ -169,7 +176,15 @@ onMounted(fetchDetail)
           <span :title="formatDateTime(detail.createdAt)">{{ fromNow(detail.createdAt) }}</span>
         </el-descriptions-item>
 
-        <el-descriptions-item label="发布人">{{ detail.author.name }}</el-descriptions-item>
+        <!-- 发布人：头像 + 姓名，点一下弹出完整资料（U6 / T11） -->
+        <el-descriptions-item label="发布人">
+          <span class="author" @click="profileOpen = true">
+            <el-avatar :size="22" :src="detail.author.avatarUrl">
+              {{ detail.author.name.slice(0, 1) }}
+            </el-avatar>
+            <span class="author-name">{{ detail.author.name }}</span>
+          </span>
+        </el-descriptions-item>
         <el-descriptions-item label="编号">{{ detail.id }}</el-descriptions-item>
 
         <el-descriptions-item label="完结时间">
@@ -220,6 +235,14 @@ onMounted(fetchDetail)
     </el-card>
 
     <el-empty v-else-if="!loading" description="没有找到这条信息" />
+
+    <!-- 发帖人信息弹窗（U6）。带上 postId，从弹窗里点"私信"时会带上帖子上下文 -->
+    <UserProfileDialog
+      v-if="detail"
+      v-model="profileOpen"
+      :user-id="detail.author.id"
+      :post-id="detail.id"
+    />
   </div>
 </template>
 
@@ -244,6 +267,18 @@ onMounted(fetchDetail)
 .tags {
   display: flex;
   gap: 8px;
+}
+
+/* 发布人可点（弹资料），给个手型和悬停变色让这个交互被发现 */
+.author {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.author:hover .author-name {
+  color: var(--el-color-primary);
 }
 
 .content {

@@ -315,7 +315,14 @@ export const MOCK_PEER_WANG_WU = 1003
 export const MOCK_PEER_ZHAO_LIU = 1004
 export const MOCK_PEER_SUN_QI = 1005
 
-/** 假数据里那个"王老师"管理员的 id */
+/**
+ * U7 管理员列表里的"第二个"管理员（李老师）的 id。
+ *
+ * ⚠️ 别和 MOCK_ADMIN_ID(9001) 搞混，两者是不同的人：
+ *   MOCK_ADMIN_ID = 9001 -> 用 admin 学号登录后拿到的 userId，也就是"王老师本人"
+ *   MOCK_PEER_ADMIN = 1  -> 列表里的另一位管理员"李老师"，
+ *                           故意设成"没绑手机号/邮箱"，用来演示"提醒开关不显示"
+ */
 export const MOCK_PEER_ADMIN = 1
 
 interface MockMessageRecord {
@@ -416,7 +423,10 @@ const messages: MockMessageRecord[] = [
   {
     id: MSG_IDS.ME_ASK_ADMIN,
     sender_id: MOCK_ME_ID,
-    receiver_id: MOCK_PEER_ADMIN,
+    // ⚠️ 这里必须是 MOCK_ADMIN_ID(9001)，不是 MOCK_PEER_ADMIN(1)。
+    //    因为用 admin 学号登录时拿到的 userId 就是 9001 ——
+    //    用 1 的话管理员登录后看不到这条消息，管理端的消息页会永远是空的。
+    receiver_id: MOCK_ADMIN_ID,
     content: '老师您好，想问一下捡到的东西可以交到哪个办公室？',
     post_id: null,
     is_read: true,
@@ -559,6 +569,7 @@ export function mockGetConversation(
     }
   }
 
+  // 「李老师」(id=1) 没绑联系方式，所以和他聊天时不显示提醒开关
   const canRemind = peerId !== MOCK_PEER_ADMIN
 
   return {
@@ -683,7 +694,7 @@ export function mockGetUserProfile(
     post_count: info.posts,
     // 契约：不能私信自己
     can_message: !isSelf,
-    // 王老师没绑联系方式，所以不能提醒他
+    // 「李老师」(MOCK_PEER_ADMIN) 没绑联系方式，所以不能提醒他
     can_remind: !isSelf && userId !== MOCK_PEER_ADMIN,
     // ⚠️ 只有管理员查看时才有 detail。普通用户这里是 null。
     detail: viewerIsAdmin

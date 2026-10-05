@@ -1,19 +1,14 @@
-/** 补零：1 -> "01"。类比 C++ 的 printf("%02d", n) */
 function pad(n: number): string {
   return String(n).padStart(2, '0')
 }
 
-/** 把任意输入转成 Date；转不出来返回 null */
 function toDate(input: string | number | Date | null | undefined): Date | null {
   if (input === null || input === undefined || input === '') return null
 
   let value: string | number | Date = input
   if (typeof input === 'string') {
-    const m = input.match(
-      /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?$/,
-    )
+    const m = input.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?$/)
     if (m) {
-      // noUncheckedIndexedAccess 开着，所以要给每一项兜个默认值
       const year = m[1] ?? ''
       const month = (m[2] ?? '').padStart(2, '0')
       const day = (m[3] ?? '').padStart(2, '0')

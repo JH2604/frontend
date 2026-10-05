@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
 import PostTable from '@/components/PostTable.vue'
-import {ROUTE_PUBLISH} from '@/utils/contract'
+import { ROUTE_PUBLISH } from '@/utils/contract'
 
 defineOptions({ name: 'MyPosts' })
 

@@ -1,5 +1,4 @@
 <script setup lang="ts">
-
 import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -18,14 +17,10 @@ const loading = ref(false)
 const total = ref(0)
 const list = ref<ItemBrief[]>([])
 
-// ===== 发帖人信息弹窗（U6）=====
-// 管理端点"发布人"可以看到学号、手机号、邮箱等完整信息 ——
-// 因为 U6 的返回由后端按角色决定（管理员才有 detail），前端只管渲染。
 const profileOpen = ref(false)
 const profileUserId = ref<number | null>(null)
 const profilePostId = ref<number | undefined>(undefined)
 
-/** 点发布人 -> 打开资料弹窗 */
 function handleOpenProfile(row: ItemBrief) {
   profileUserId.value = row.author?.id ?? null
   profilePostId.value = row.id
@@ -95,16 +90,6 @@ function handleReset() {
   handleSearch()
 }
 
-/**
- * 删除帖子（P4）。
- *
- * 管理端删的都是【别人的】帖子，所以用带原因输入的 prompt：
- * 契约 P4 写了 reason 的用途是"后端以该管理员身份给发帖人发一条站内私信说明"，
- * 填了原因，发帖人就知道自己为什么被删，不至于莫名其妙。
- *
- * 写法与 views/user/ItemDetail.vue 的 handleDelete() 保持一致
- * （那边是"删自己的用 confirm、管理员删别人的用 prompt"）。
- */
 async function handleDelete(row: ItemBrief) {
   const id = row.id
   const title = row.title
@@ -122,23 +107,20 @@ async function handleDelete(row: ItemBrief) {
         cancelButtonText: '取消',
       },
     )
-    // 只填了空格等于没填 —— trim 之后是空串就不传这个字段
+
     const trimmed = (value ?? '').trim()
     reason = trimmed || undefined
   } catch {
-    // 点了取消
     return
   }
 
   try {
     await deleteItem(id, reason)
     ElMessage.success('已删除')
-    // 删掉当前页最后一条时页码可能超出范围，简单处理：回到第 1 页
+
     if (list.value.length === 1 && query.page > 1) query.page -= 1
     fetchList()
-  } catch {
-    // 错误提示已经在 utils/request.ts 的拦截器里统一弹过了
-  }
+  } catch {}
 }
 
 onMounted(fetchList)
@@ -178,7 +160,12 @@ onMounted(fetchList)
 
         <el-form-item label="状态">
           <el-select v-model="query.status" style="width: 130px" @change="handleSearch">
-            <el-option v-for="o in statusOptions" :key="o.value" :label="o.label" :value="o.value" />
+            <el-option
+              v-for="o in statusOptions"
+              :key="o.value"
+              :label="o.label"
+              :value="o.value"
+            />
           </el-select>
         </el-form-item>
 

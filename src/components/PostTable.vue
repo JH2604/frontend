@@ -1,5 +1,4 @@
 <script setup lang="ts">
-
 import { computed, onActivated, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -9,12 +8,7 @@ import { deleteItem, getItemList, updateItemStatus } from '@/api/item'
 import PageTable from '@/components/PageTable.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import UserProfileDialog from '@/components/UserProfileDialog.vue'
-import {
-  PAGE_SIZE_DEFAULT,
-  itemDetailPath,
-  nextStatus,
-  statusActionText,
-} from '@/utils/contract'
+import { PAGE_SIZE_DEFAULT, itemDetailPath, nextStatus, statusActionText } from '@/utils/contract'
 import { formatDateTime, fromNow } from '@/utils/format'
 const props = withDefaults(defineProps<{ mine?: boolean }>(), { mine: false })
 
@@ -24,10 +18,6 @@ const loading = ref(false)
 const total = ref(0)
 const list = ref<ItemBrief[]>([])
 
-// ===== 发帖人信息弹窗（T11 / 契约 U6）=====
-// 列表里每一行都有发布人，点了弹出对应那位的资料。
-// 用两个 ref 记录"当前在看谁、从哪个帖子点的"，
-// 弹窗复用同一个实例（不用给每行都创建一个弹窗）。
 const profileOpen = ref(false)
 const profileUserId = ref<number | null>(null)
 const profilePostId = ref<number | undefined>(undefined)
@@ -79,14 +69,12 @@ async function fetchList() {
       type: query.type,
       status: query.status,
       order: query.order,
-      // mine 为 true 时后端只返回"我发布的"（文档 P1 的 mine 参数）
+
       mine: props.mine,
     })
     list.value = res.list
     total.value = res.total
   } catch {
-    // 错误提示已经在 utils/request.ts 的拦截器里统一弹过了。
-    // 这里只负责"别让页面白屏"：失败就把列表清空。
     list.value = []
     total.value = 0
   } finally {
@@ -106,17 +94,16 @@ function handleReset() {
   query.order = 'desc'
   handleSearch()
 }
-async function handleToggleStatus(row: ItemBrief)
-{
-  const next =nextStatus(row.status)
+async function handleToggleStatus(row: ItemBrief) {
+  const next = nextStatus(row.status)
   const actionText = statusActionText(row.type, row.status)
   try {
-    await ElMessageBox.confirm(`确定把「${row.title}」${actionText}吗？`, '确认',{
+    await ElMessageBox.confirm(`确定把「${row.title}」${actionText}吗？`, '确认', {
       type: 'warning',
       confirmButtonText: '确认',
       cancelButtonText: '取消',
     })
-  } catch{
+  } catch {
     return
   }
   try {
@@ -125,18 +112,16 @@ async function handleToggleStatus(row: ItemBrief)
     row.closedAt = res.closedAt
     ElMessage.success(`已${actionText}`)
     if (query.status !== 'all') fetchList()
-  } catch {
-    // 错误提示已经在 utils/request.ts 的拦截器里统一弹
-  }
+  } catch {}
 }
 
 async function handleDeleteRow(row: ItemBrief) {
   try {
-    await ElMessageBox.confirm(
-      `确定要删除「${row.title}」吗？删掉就找不回来了。`,
-      '删除确认',
-      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
-    )
+    await ElMessageBox.confirm(`确定要删除「${row.title}」吗？删掉就找不回来了。`, '删除确认', {
+      type: 'warning',
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+    })
   } catch {
     return
   }
@@ -145,9 +130,7 @@ async function handleDeleteRow(row: ItemBrief) {
     ElMessage.success('已删除')
     if (list.value.length === 1 && query.page > 1) query.page -= 1
     fetchList()
-  } catch {
-    // 错误提示已经由拦截器弹出
-  }
+  } catch {}
 }
 
 onMounted(fetchList)
@@ -256,7 +239,6 @@ onActivated(() => {
 </template>
 
 <style scoped>
-/* 发布人可点（弹资料），给个手型和悬停变色让这个交互被发现 */
 .author {
   display: inline-flex;
   align-items: center;

@@ -1,5 +1,4 @@
 <script setup lang="ts">
-
 import { RouterView, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { logoutApi } from '@/api/auth'
@@ -17,14 +16,12 @@ import {
 
 const router = useRouter()
 
-// useUserStore()：拿到全局登录态（见 stores/user.ts）
 const userStore = useUserStore()
 
 const goPublish = () => {
   router.push(ROUTE_PUBLISH)
 }
 
-/** 点自己的头像 / 用户名 -> 自己的用户主页（U6） */
 const goMyProfile = () => {
   if (!userStore.userId) return
   router.push(userProfilePath(userStore.userId))
@@ -33,18 +30,14 @@ const goMyProfile = () => {
 const logout = async () => {
   await logoutApi().catch(() => undefined)
   userStore.logout()
-  unreadTotal.value = 0 // 顺手把小红点清零
+  unreadTotal.value = 0
   router.push(ROUTE_LOGIN)
 }
 
-// 未读私信小红点（契约 M1）。
-// 轮询逻辑统一放在 utils/unread.ts 的 useUnreadPolling() 里，
-// 管理端外壳（AdminLayout）也调同一个函数，两边只维护一份。
 useUnreadPolling()
 </script>
 
 <template>
-
   <el-container class="layout">
     <el-header class="header">
       <span class="logo">校园失物招领</span>
@@ -61,12 +54,7 @@ useUnreadPolling()
         <el-menu-item :index="ROUTE_MESSAGES">
           消息
 
-          <el-badge
-            :value="unreadTotal"
-            :max="99"
-            :hidden="unreadTotal === 0"
-            class="badge"
-          />
+          <el-badge :value="unreadTotal" :max="99" :hidden="unreadTotal === 0" class="badge" />
         </el-menu-item>
         <el-menu-item :index="ROUTE_ADMINS">联系管理员</el-menu-item>
         <el-menu-item :index="ROUTE_SETTINGS">用户中心</el-menu-item>
@@ -84,7 +72,6 @@ useUnreadPolling()
     </el-header>
 
     <el-main>
-
       <RouterView v-slot="{ Component }">
         <keep-alive :include="['ItemList', 'MyPosts', 'Messages']">
           <component :is="Component" />
@@ -95,9 +82,7 @@ useUnreadPolling()
 </template>
 
 <style scoped>
-
 .layout {
-
   min-height: 100vh;
 }
 
@@ -111,12 +96,11 @@ useUnreadPolling()
 .logo {
   font-size: 18px;
   font-weight: 600;
-  /* nowrap：不换行（不然窗口变窄时"校园失物招领"会被折成两行） */
+
   white-space: nowrap;
 }
 
 .menu {
-
   flex: 1;
   border-bottom: none;
 }

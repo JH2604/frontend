@@ -1,5 +1,4 @@
 <script setup lang="ts">
-
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -18,10 +17,8 @@ const profile = ref<UserProfile | null>(null)
 
 const userId = computed(() => Number(route.params.id))
 
-/** 是不是在看自己 */
 const isSelf = computed(() => profile.value?.id === userStore.userId)
 
-/** 后端给的联系方式（普通用户视角下是 null，管理员视角下才有） */
 const contact = computed(() => {
   const d = profile.value?.detail
   if (!d) return null
@@ -40,14 +37,12 @@ async function fetchProfile() {
   try {
     profile.value = await getUserProfile(userId.value)
   } catch {
-    // 提示已由拦截器统一弹过；这里保证不白屏
     profile.value = null
   } finally {
     loading.value = false
   }
 }
 
-/** 私信 TA（M4：站内私信是 v1.1 里用户之间唯一的联系方式） */
 function handleMessage() {
   if (!profile.value) return
   if (!profile.value.canMessage) {
@@ -77,7 +72,7 @@ onMounted(fetchProfile)
         <div class="who">
           <div class="name-line">
             <span class="name">{{ profile.name }}</span>
-            <!-- 管理员身份标出来（U7 联系管理员页也会用到这个概念） -->
+
             <el-tag v-if="profile.role === Role.ADMIN" type="warning" size="small">管理员</el-tag>
             <el-tag v-else size="small" type="info">学生</el-tag>
             <el-tag v-if="isSelf" size="small" effect="plain">这是你自己</el-tag>
@@ -86,7 +81,6 @@ onMounted(fetchProfile)
         </div>
 
         <div class="actions">
-          <!-- 私信入口的显示条件用后端给的 canMessage（见 script 里的说明） -->
           <el-button v-if="profile.canMessage" type="primary" @click="handleMessage">
             私信 TA
           </el-button>
@@ -101,7 +95,6 @@ onMounted(fetchProfile)
         <el-descriptions :column="2" border>
           <el-descriptions-item label="学号">{{ contact.studentId || '—' }}</el-descriptions-item>
           <el-descriptions-item label="手机号">
-            <!-- 契约 U1 说"本人可以看到完整值；前端展示时打码" -->
             <span v-if="contact.phone" :title="contact.phone">{{ maskPhone(contact.phone) }}</span>
             <span v-else>未绑定</span>
           </el-descriptions-item>

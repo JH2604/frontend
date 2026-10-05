@@ -1,5 +1,4 @@
 <script setup lang="ts">
-
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -33,24 +32,20 @@ const conversation = ref<Conversation | null>(null)
 const list = ref<ChatMessage[]>([])
 const hasMore = ref(false)
 
-/** 输入框内容 */
 const draft = ref('')
-/** 是否勾选"短信 / 邮件提醒对方"（默认不勾，契约 M4 的 remind 默认 false） */
+
 const wantRemind = ref(false)
 
-/** 聊天区容器，用来控制滚动 */
 const scroller = ref<HTMLElement | null>(null)
 
 const peerId = computed(() => Number(route.params.peerId))
 const peer = computed(() => conversation.value?.peer ?? null)
 const canRemind = computed(() => conversation.value?.canRemind ?? false)
 
-const postId = ref<number | undefined>(
-  route.query.postId ? Number(route.query.postId) : undefined,
-)
+const postId = ref<number | undefined>(route.query.postId ? Number(route.query.postId) : undefined)
 const linkedPost = ref<Item | null>(null)
 
-async function fetchLinkedPost(){
+async function fetchLinkedPost() {
   const id = postId.value
   if (!id) return
   try {
@@ -60,25 +55,22 @@ async function fetchLinkedPost(){
   }
 }
 
-/** 我发出的消息靠右显示，收到的靠左 */
 function isMine(m: ChatMessage): boolean {
   return m.direction === 'sent'
 }
 
-/** 滚到底部（看最新消息） */
 async function scrollToBottom() {
   await nextTick()
   const el = scroller.value
   if (el) el.scrollTop = el.scrollHeight
 }
 
-/** 首次加载：不传 beforeId，拿最新的一批 */
 async function fetchConversation() {
   loading.value = true
   try {
     const res = await getConversation(
       peerId.value,
-      // mark_read 不传（契约默认 true）：进聊天页就把对方发给我的标为已读
+
       { limit: MESSAGE_PAGE_SIZE_DEFAULT },
       userStore.userId,
     )
@@ -89,13 +81,10 @@ async function fetchConversation() {
     try {
       const marked = await markRead({ peerId: peerId.value })
       setUnreadTotal(marked.unreadTotal)
-    } catch {
-      // 标已读失败不影响看聊天
-    }
+    } catch {}
 
     await scrollToBottom()
   } catch {
-    // 提示已弹；保证页面不白屏
     conversation.value = null
     list.value = []
     hasMore.value = false
@@ -104,7 +93,7 @@ async function fetchConversation() {
   }
 }
 
-async function loadMore(){
+async function loadMore() {
   const earliest = list.value[0]
   if (!earliest || loadingMore.value || !hasMore.value) return
   const box = scroller.value
@@ -124,7 +113,6 @@ async function loadMore(){
     await nextTick()
     if (box) box.scrollTop = box.scrollHeight - oldHeight
   } catch {
-    // 提示已弹；保留现有消息列表
   } finally {
     loadingMore.value = false
   }
@@ -136,8 +124,6 @@ function handleScroll() {
   loadMore()
 }
 
-
-/** 发送私信（M4） */
 async function handleSend() {
   const content = draft.value.trim()
   if (!content) {
@@ -155,9 +141,9 @@ async function handleSend() {
       {
         receiverId: peerId.value,
         content,
-        // 从帖子详情跳过来时带上（只有一条会话的第一句需要）
+
         postId: postId.value,
-        // 没勾就不发这个字段（契约默认 false，少发一个字段）
+
         remind: wantRemind.value || undefined,
       },
       userStore.userId,
@@ -172,7 +158,6 @@ async function handleSend() {
     postId.value = undefined
     await scrollToBottom()
   } catch {
-    // 提示已弹；保留输入框内容方便重试
   } finally {
     sending.value = false
   }
@@ -212,11 +197,7 @@ onMounted(() => {
     <el-empty v-if="!loading && !peer" description="找不到这个用户" />
 
     <template v-else>
-      <div
-        v-if="linkedPost"
-        class="post-card"
-        @click="router.push(itemDetailPath(linkedPost.id))"
-      >
+      <div v-if="linkedPost" class="post-card" @click="router.push(itemDetailPath(linkedPost.id))">
         <el-tag :type="linkedPost.type === 'lost' ? 'danger' : 'success'" size="small">
           {{ linkedPost.type === 'lost' ? '失物' : '招领' }}
         </el-tag>
@@ -261,10 +242,7 @@ onMounted(() => {
         />
 
         <div class="editor-foot">
-
-          <el-checkbox v-if="canRemind" v-model="wantRemind">
-            短信 / 邮件提醒对方
-          </el-checkbox>
+          <el-checkbox v-if="canRemind" v-model="wantRemind"> 短信 / 邮件提醒对方 </el-checkbox>
           <span v-else class="no-remind">对方暂不接收短信 / 邮件提醒</span>
 
           <el-button type="primary" :loading="sending" @click="handleSend">

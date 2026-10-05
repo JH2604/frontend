@@ -1,5 +1,4 @@
 <script setup lang="ts">
-
 import { onActivated, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -7,11 +6,7 @@ import type { MessageBox, MessageBrief } from '@/types/api'
 import { getMessageList, markRead } from '@/api/message'
 import UserProfileDialog from '@/components/UserProfileDialog.vue'
 import { useUserStore } from '@/stores/user'
-import {
-  MESSAGE_PAGE_SIZE_DEFAULT,
-  itemDetailPath,
-  messageChatPath,
-} from '@/utils/contract'
+import { MESSAGE_PAGE_SIZE_DEFAULT, itemDetailPath, messageChatPath } from '@/utils/contract'
 import { formatDateTime, fromNow } from '@/utils/format'
 import { refreshUnread, setUnreadTotal } from '@/utils/unread'
 
@@ -24,8 +19,6 @@ const loading = ref(false)
 const list = ref<MessageBrief[]>([])
 const total = ref(0)
 
-// ===== 对方资料弹窗（T11 / 契约 U6）=====
-// 点头像看对方资料；点整行才是进聊天页。两者靠 @click.stop 区分。
 const profileOpen = ref(false)
 const profileUserId = ref<number | null>(null)
 
@@ -62,7 +55,6 @@ async function fetchList() {
     list.value = res.list
     total.value = res.total
   } catch {
-    // 提示已经在 utils/request.ts 的拦截器里统一弹过，这里只保证不白屏
     list.value = []
     total.value = 0
   } finally {
@@ -81,23 +73,18 @@ function handleReset() {
   handleSearch()
 }
 
-/** 点一条消息：如果是收到的，先标已读，再跳到聊天页 */
 async function handleOpen(row: MessageBrief) {
-  // 只有"我收到的"消息才谈得上"我把它标为已读"
   if (row.direction === 'received' && !row.isRead) {
     try {
       const res = await markRead({ ids: [row.id] })
-      // M5 的返回里带最新的未读数，直接用它更新小红点，不用再调 M1
+
       setUnreadTotal(res.unreadTotal)
       row.isRead = true
-    } catch {
-      // 标记失败不影响"跳过去看聊天"这件事，所以这里吞掉错误继续走
-    }
+    } catch {}
   }
   router.push(messageChatPath(row.peer.id))
 }
 
-/** 一键全部已读（契约 M5 的第三种用法 { all: true }） */
 const marking = ref(false)
 async function handleMarkAllRead() {
   marking.value = true
@@ -107,27 +94,23 @@ async function handleMarkAllRead() {
     ElMessage.success(res.updated > 0 ? `已把 ${res.updated} 条标为已读` : '没有未读消息')
     await fetchList()
   } catch {
-    // 提示已弹
   } finally {
     marking.value = false
   }
 }
 
-/** 只保留"作者"两个字以内的展示，避免长名字撑破布局 */
 function directionText(row: MessageBrief): string {
   return row.direction === 'sent' ? '我 → ' : ''
 }
 
 onMounted(fetchList)
 
-// 被 keep-alive 缓存后第二次进来走 onActivated（和 PostTable 同一套写法）
 let activatedOnce = false
 onActivated(() => {
   if (activatedOnce) fetchList()
   activatedOnce = true
 })
 
-// 顺便刷新一下未读小红点（进入这个页面时它会变）
 onMounted(refreshUnread)
 </script>
 
@@ -243,7 +226,6 @@ onMounted(refreshUnread)
   background: #f5f7fa;
 }
 
-/* 未读整行加一点点底色，配合左侧的圆点，一眼能扫出来 */
 .item.unread {
   background: #f0f7ff;
 }
@@ -252,7 +234,6 @@ onMounted(refreshUnread)
   border-top: 1px solid #f0f2f5;
 }
 
-/* 头像是可点的（进用户主页 U6），给个手型让这个交互被发现 */
 .peer-avatar {
   cursor: pointer;
   flex-shrink: 0;

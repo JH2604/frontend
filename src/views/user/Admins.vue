@@ -60,7 +60,7 @@ onMounted(fetchAdmins)
 
       <div class="body">
         <div class="name">{{ admin.name }}</div>
-        <!-- 契约 U7 的 email 是管理员对外公开的工作邮箱，所以【不打码】 -->
+
         <div class="email">
           <span v-if="admin.email">{{ admin.email }}</span>
           <span v-else class="none">未公开工作邮箱</span>

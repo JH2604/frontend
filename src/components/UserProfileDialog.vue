@@ -102,7 +102,6 @@ function handleMessage() {
           </el-descriptions>
         </template>
 
-        <!-- 普通用户视角：说清"看不到详情"的原因，而不是留一块空白让人以为坏了 -->
         <el-alert
           v-else
           class="privacy"
@@ -118,7 +117,7 @@ function handleMessage() {
 
     <template #footer>
       <el-button @click="open = false">关闭</el-button>
-      <!-- 私信入口：能不能私信由后端给的 canMessage 决定（含"不能私信自己"） -->
+
       <el-button v-if="profile?.canMessage" type="primary" @click="handleMessage">
         私信 TA
       </el-button>

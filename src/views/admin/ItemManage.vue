@@ -185,11 +185,6 @@ onMounted(fetchList)
         {{ row.location?.name || '—' }}
       </template>
 
-      <!--
-        发布人：头像 + 姓名，点一下打开资料弹窗（U6）。
-        ⚠️ 外层行没有点击事件，所以这里不需要 @click.stop；
-           但如果以后给行加了点击，记得补上 .stop，否则会同时触发两件事。
-      -->
       <template #author="{ row }">
         <span class="author" @click="handleOpenProfile(row)">
           <el-avatar :size="24" :src="row.author?.avatarUrl">
@@ -213,7 +208,6 @@ onMounted(fetchList)
       </template>
     </PageTable>
 
-    <!-- 发帖人信息弹窗（U6）。管理端能看到完整信息，由后端按角色决定 -->
     <UserProfileDialog v-model="profileOpen" :user-id="profileUserId" :post-id="profilePostId" />
   </el-card>
 </template>

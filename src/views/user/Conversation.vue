@@ -206,7 +206,6 @@ onMounted(() => {
       </div>
 
       <div ref="scroller" class="scroller" @scroll="handleScroll">
-        <!-- 加载更早的消息（M3 游标分页） -->
         <div v-if="hasMore" class="more">
           <el-button link :loading="loadingMore" @click="loadMore">加载更早的消息</el-button>
         </div>
@@ -221,7 +220,7 @@ onMounted(() => {
             <div class="bubble">{{ m.content }}</div>
             <div class="time" :title="formatDateTime(m.createdAt)">
               {{ fromNow(m.createdAt) }}
-              <!-- 我发出的消息：is_read 表示"对方读没读"（契约 M2/M3 的说明） -->
+
               <span v-if="isMine(m)">{{ m.isRead ? ' · 已读' : ' · 未读' }}</span>
               <span v-if="m.reminded" class="remind"> · 已提醒</span>
             </div>
@@ -229,7 +228,6 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- 输入区 -->
       <div class="editor">
         <el-input
           v-model="draft"

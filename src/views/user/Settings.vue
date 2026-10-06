@@ -1,10 +1,15 @@
 <script setup lang="ts">
-
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import type { Theme, UserMe } from '@/types/api'
-import { bindContact, changeMyPassword, getMyProfile, sendVerificationCode, updateMe } from '@/api/user'
+import {
+  bindContact,
+  changeMyPassword,
+  getMyProfile,
+  sendVerificationCode,
+  updateMe,
+} from '@/api/user'
 import ImageUploader from '@/components/ImageUploader.vue'
 import { useUserStore } from '@/stores/user'
 import {
@@ -30,7 +35,6 @@ const userStore = useUserStore()
 const loading = ref(false)
 const me = ref<UserMe | null>(null)
 
-// ===== 主题 =====
 const themeOptions: { label: string; value: Theme }[] = [
   { label: '明亮', value: 'light' },
   { label: '暗黑', value: 'dark' },
@@ -43,11 +47,9 @@ const savingTheme = ref(false)
 const avatarList = ref<string[]>([])
 const savingAvatar = ref(false)
 
-// ===== 提醒开关（U2 的 allow_remind）=====
 const allowRemind = ref(true)
 const savingRemind = ref(false)
 
-// ===== 改密码（U3）=====
 const pwdFormRef = ref<FormInstance>()
 const pwdForm = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' })
 const pwdLoading = ref(false)
@@ -56,7 +58,7 @@ const pwdRules: FormRules = {
   oldPassword: [{ required: true, message: '请输入原密码', trigger: 'blur' }],
   newPassword: [
     { required: true, message: '请输入新密码', trigger: 'blur' },
-    // 规则来自 contract.ts 的 PASSWORD_RULE_TEXT，和注册时同一套
+
     {
       pattern: /^(?=.*[A-Za-z])(?=.*\d)[\S]{8,32}$/,
       message: PASSWORD_RULE_TEXT,
@@ -74,7 +76,6 @@ const pwdRules: FormRules = {
   ],
 }
 
-// ===== 联系方式（U4 + U5）=====
 const contactFormRef = ref<FormInstance>()
 const contactForm = reactive({
   channel: ContactChannel.SMS as ContactChannelValue,
@@ -83,7 +84,7 @@ const contactForm = reactive({
 })
 const codeSent = ref(false)
 const sendingCode = ref(false)
-/** 发验证码时的倒计时（防止用户狂点；契约里后端也有 60 秒 1 次的限制） */
+
 const countdown = ref(0)
 let countdownTimer: number | undefined
 const bindingContact = ref(false)
@@ -93,7 +94,6 @@ const contactRules: FormRules = {
   code: [{ required: true, message: '请输入验证码', trigger: 'blur' }],
 }
 
-/** 当前渠道对应的"目标"叫什么、placeholder 写什么 */
 const targetLabel = computed(() => (contactForm.channel === ContactChannel.SMS ? '手机号' : '邮箱'))
 const targetPlaceholder = computed(() =>
   contactForm.channel === ContactChannel.SMS ? '11 位手机号' : '例如 zhangsan@example.com',
@@ -106,9 +106,9 @@ async function fetchMe() {
     me.value = res
     theme.value = res.theme
     allowRemind.value = res.allowRemind
-    // 头像只有一张，塞进数组给 ImageUploader 用
+
     avatarList.value = res.avatarUrl ? [res.avatarUrl] : []
-    // 后端是最权威的主题来源（契约 U2 说换设备登录也要保持），同步一下
+
     syncThemeFromServer(res.theme)
   } catch {
     me.value = null
@@ -122,7 +122,6 @@ function handleThemeRadioChange(next: string | number | boolean | undefined) {
   void handleThemeChange(next)
 }
 
-/** 主题切换：先本地生效，再异步保存（契约 U2 的要求，见文件头注释） */
 async function handleThemeChange(next: Theme) {
   setThemeLocal(next)
   theme.value = next
@@ -131,14 +130,11 @@ async function handleThemeChange(next: Theme) {
     await updateMe({ theme: next })
     ElMessage.success('主题已保存')
   } catch {
-    // ⚠️ 故意不回滚：界面已经是用户要的样子了，回滚只会让人莫名其妙。
-    //    提示已经由拦截器弹过，这里不再重复弹。
   } finally {
     savingTheme.value = false
   }
 }
 
-/** 头像上传成功后保存（F1 先拿 URL，再走 U2 存下来） */
 async function handleAvatarChange(urls: string[]) {
   const url = urls[0]
   if (!url || url === me.value?.avatarUrl) return
@@ -149,14 +145,11 @@ async function handleAvatarChange(urls: string[]) {
     me.value = res
     ElMessage.success('头像已更新')
   } catch {
-    // 保存失败就把界面退回原来的头像，避免"看着换了其实没存上"
     avatarList.value = me.value?.avatarUrl ? [me.value.avatarUrl] : []
   } finally {
     savingAvatar.value = false
   }
 }
-
-// ===== 下面三个 watch 都是"改了才存" =====
 
 watch(avatarList, (urls) => {
   handleAvatarChange(urls)
@@ -166,7 +159,6 @@ function handleRemindSwitchChange(v: string | number | boolean | undefined) {
   void handleAllowRemindChange(v === true)
 }
 
-/** 提醒开关（U2 的 allow_remind） */
 async function handleAllowRemindChange(next: boolean) {
   savingRemind.value = true
   try {
@@ -174,14 +166,12 @@ async function handleAllowRemindChange(next: boolean) {
     me.value = res
     ElMessage.success(next ? '已开启私信提醒' : '已关闭私信提醒')
   } catch {
-    // 失败回滚开关（这个和主题不同：开关是个动作，没生效就该退回去）
     allowRemind.value = !next
   } finally {
     savingRemind.value = false
   }
 }
 
-/** 改密码（U3） */
 async function handleChangePassword() {
   const valid = await pwdFormRef.value?.validate().catch(() => false)
   if (!valid) return
@@ -197,13 +187,11 @@ async function handleChangePassword() {
     userStore.logout()
     router.push(ROUTE_LOGIN)
   } catch {
-    // 错误提示已经由 mockFail（假后端）或 request.ts 拦截器（真后端）弹出
   } finally {
     pwdLoading.value = false
   }
 }
 
-/** 发验证码（U4） */
 async function handleSendCode() {
   const target = contactForm.target.trim()
   if (!target) {
@@ -216,7 +204,7 @@ async function handleSendCode() {
     await sendVerificationCode({ channel: contactForm.channel, target })
     codeSent.value = true
     ElMessage.success(`验证码已发送到${targetLabel.value}（演示环境固定为 123456）`)
-    // 60 秒倒计时，和后端的"同一目标 60 秒 1 次"限制对齐
+
     countdown.value = 60
     countdownTimer = window.setInterval(() => {
       countdown.value -= 1
@@ -226,20 +214,17 @@ async function handleSendCode() {
       }
     }, 1000)
   } catch {
-    // 错误提示已经由 mockFail（假后端）或 request.ts 拦截器（真后端）弹出
   } finally {
     sendingCode.value = false
   }
 }
 
-/** 切换渠道要重置已发状态（因为 target 的含义变了） */
 function handleChannelChange() {
   contactForm.target = ''
   contactForm.code = ''
   codeSent.value = false
 }
 
-/** 绑定 / 修改联系方式（U5） */
 async function handleBindContact() {
   const valid = await contactFormRef.value?.validate().catch(() => false)
   if (!valid) return
@@ -256,7 +241,7 @@ async function handleBindContact() {
       code: contactForm.code.trim(),
     })
     ElMessage.success('绑定成功')
-    // 用返回的最新值刷新展示，不重新拉整个 U1（省一次请求）
+
     if (me.value) {
       me.value.phone = res.phone
       me.value.email = res.email
@@ -264,7 +249,6 @@ async function handleBindContact() {
     contactForm.code = ''
     codeSent.value = false
   } catch {
-    // 错误提示已经由 mockFail（假后端）或 request.ts 拦截器（真后端）弹出
   } finally {
     bindingContact.value = false
   }
@@ -278,7 +262,6 @@ onMounted(fetchMe)
     <el-page-header content="用户中心" @back="router.back()" />
 
     <el-card v-if="me">
-      <!-- ===== 基本信息（U1 展示） ===== -->
       <div class="profile">
         <div class="avatar-block">
           <ImageUploader
@@ -316,7 +299,6 @@ onMounted(fetchMe)
 
       <el-divider />
 
-      <!-- ===== 外观 + 提醒开关（U2） ===== -->
       <div class="section-title">外观与提醒</div>
       <el-form label-width="120px">
         <el-form-item label="主题">
@@ -344,7 +326,6 @@ onMounted(fetchMe)
 
       <el-divider />
 
-      <!-- ===== 联系方式（U4 + U5） ===== -->
       <div class="section-title">绑定手机号 / 邮箱</div>
       <el-form
         ref="contactFormRef"
@@ -375,7 +356,7 @@ onMounted(fetchMe)
           >
             {{ countdown > 0 ? `${countdown} 秒后可重发` : '获取验证码' }}
           </el-button>
-          <!-- 说明为什么要锁住输入框 -->
+
           <span v-if="codeSent" class="hint">
             已发送验证码。修改{{ targetLabel }}需要重新获取验证码
           </span>
@@ -399,7 +380,6 @@ onMounted(fetchMe)
 
       <el-divider />
 
-      <!-- ===== 修改密码（U3） ===== -->
       <div class="section-title">修改密码</div>
       <el-form
         ref="pwdFormRef"
@@ -433,7 +413,6 @@ onMounted(fetchMe)
 
     <el-empty v-else-if="!loading" description="加载失败" />
 
-    <!-- 这个页面本身的路径也写上，方便你确认路由 -->
     <div class="route-note">当前页面路由：{{ ROUTE_SETTINGS }}</div>
   </div>
 </template>

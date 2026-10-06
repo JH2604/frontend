@@ -1,5 +1,4 @@
 <script setup lang="ts" generic="T">
-
 import type { TableColumn } from '@/types/table'
 
 const props = withDefaults(
@@ -14,14 +13,12 @@ const props = withDefaults(
 
 const emit = defineEmits<{ search: [] }>()
 
-// v-model:page="query.page" 这样用
 const page = defineModel<number>('page', { default: 1 })
 const pageSize = defineModel<number>('pageSize', { default: 10 })
 </script>
 
 <template>
   <div class="page-table">
-    <!-- 有 search 插槽才画搜索栏，页面自己决定放几个输入框 -->
     <el-form v-if="$slots.search" inline @submit.prevent="emit('search')">
       <slot name="search" />
     </el-form>
@@ -35,7 +32,6 @@ const pageSize = defineModel<number>('pageSize', { default: 10 })
         :width="col.width"
         :min-width="col.minWidth"
       >
-        <!-- col.slot 有值时，把这一列的渲染权交给页面 -->
         <template v-if="col.slot" #default="scope">
           <slot :name="col.slot" v-bind="scope" />
         </template>

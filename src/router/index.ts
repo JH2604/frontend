@@ -7,7 +7,7 @@ const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     {
-      path: ROUTE_LOGIN, // '/login'
+      path: ROUTE_LOGIN,
       name: 'login',
       component: () => import('@/views/LoginView.vue'),
     },
@@ -18,7 +18,6 @@ const router = createRouter({
       meta: { requireAuth: true },
       children: [
         {
-          // path: '' 表示"父路径本身"，也就是访问 '/' 时显示它
           path: '',
           name: 'home',
           component: () => import('@/views/user/ItemList.vue'),
@@ -38,7 +37,7 @@ const router = createRouter({
           name: 'publish',
           component: () => import('@/views/user/Publish.vue'),
         },
-        // 消息中心（v1.1 契约 M1~M5）
+
         {
           path: 'messages',
           name: 'messages',
@@ -54,13 +53,13 @@ const router = createRouter({
           name: 'user-profile',
           component: () => import('@/views/user/UserProfile.vue'),
         },
-        // 用户中心（U1 展示 + U2 改资料 + U3 改密码 + U4/U5 绑联系方式）
+
         {
           path: 'settings',
           name: 'settings',
           component: () => import('@/views/user/Settings.vue'),
         },
-        // 联系管理员（U7）
+
         {
           path: 'admins',
           name: 'admins',
@@ -101,7 +100,6 @@ router.beforeEach((to) => {
     return { path: '/' }
   }
 
-  // 情况 3：都没问题，放行
   return true
 })
 

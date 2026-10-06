@@ -1,5 +1,4 @@
 <script setup lang="ts">
-
 import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -8,6 +7,7 @@ import type { TableColumn } from '@/types/table'
 import { deleteItem, getItemList } from '@/api/item'
 import PageTable from '@/components/PageTable.vue'
 import StatusTag from '@/components/StatusTag.vue'
+import UserProfileDialog from '@/components/UserProfileDialog.vue'
 import { PAGE_SIZE_DEFAULT, itemDetailPath } from '@/utils/contract'
 import { formatDateTime, fromNow } from '@/utils/format'
 
@@ -16,6 +16,16 @@ const router = useRouter()
 const loading = ref(false)
 const total = ref(0)
 const list = ref<ItemBrief[]>([])
+
+const profileOpen = ref(false)
+const profileUserId = ref<number | null>(null)
+const profilePostId = ref<number | undefined>(undefined)
+
+function handleOpenProfile(row: ItemBrief) {
+  profileUserId.value = row.author?.id ?? null
+  profilePostId.value = row.id
+  profileOpen.value = true
+}
 
 const query = reactive({
   page: 1,
@@ -42,7 +52,7 @@ const columns: TableColumn[] = [
   { prop: 'title', label: '标题', minWidth: 180 },
   { label: '类型', width: 90, slot: 'type' },
   { label: '地点', width: 150, slot: 'location' },
-  { label: '发布人', width: 110, slot: 'author' },
+  { label: '发布人', width: 140, slot: 'author' },
   { label: '发布时间', width: 170, slot: 'createdAt' },
   { label: '状态', width: 100, slot: 'status' },
   { label: '操作', width: 130, slot: 'action' },
@@ -81,19 +91,36 @@ function handleReset() {
 }
 
 async function handleDelete(row: ItemBrief) {
+  const id = row.id
+  const title = row.title
+  let reason: string | undefined
+
   try {
-    await ElMessageBox.confirm(`确定要删除「${row.title}」吗？删掉就找不回来了。`, '删除确认', {
-      type: 'warning',
-      confirmButtonText: '删除',
-      cancelButtonText: '取消',
-    })
+    const { value } = await ElMessageBox.prompt(
+      `确定要删除「${title}」吗？删掉就找不回来了。\n\n你可以填写删除理由（可选），它会通过站内私信告知发帖人。`,
+      '删除确认',
+      {
+        inputPlaceholder: '此处输入删除理由（可选，最多 200 字）',
+        inputValidator: (value) =>
+          value && value.length > 200 ? '删除理由不能超过 200 个字符' : true,
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+      },
+    )
+
+    const trimmed = (value ?? '').trim()
+    reason = trimmed || undefined
   } catch {
     return
   }
 
-  await deleteItem(row.id)
-  ElMessage.success('已删除')
-  fetchList()
+  try {
+    await deleteItem(id, reason)
+    ElMessage.success('已删除')
+
+    if (list.value.length === 1 && query.page > 1) query.page -= 1
+    fetchList()
+  } catch {}
 }
 
 onMounted(fetchList)
@@ -133,7 +160,12 @@ onMounted(fetchList)
 
         <el-form-item label="状态">
           <el-select v-model="query.status" style="width: 130px" @change="handleSearch">
-            <el-option v-for="o in statusOptions" :key="o.value" :label="o.label" :value="o.value" />
+            <el-option
+              v-for="o in statusOptions"
+              :key="o.value"
+              :label="o.label"
+              :value="o.value"
+            />
           </el-select>
         </el-form-item>
 
@@ -153,8 +185,18 @@ onMounted(fetchList)
         {{ row.location?.name || '—' }}
       </template>
 
+      <!--
+        发布人：头像 + 姓名，点一下打开资料弹窗（U6）。
+        ⚠️ 外层行没有点击事件，所以这里不需要 @click.stop；
+           但如果以后给行加了点击，记得补上 .stop，否则会同时触发两件事。
+      -->
       <template #author="{ row }">
-        {{ row.author?.name || '未知用户' }}
+        <span class="author" @click="handleOpenProfile(row)">
+          <el-avatar :size="24" :src="row.author?.avatarUrl">
+            {{ (row.author?.name || '?').slice(0, 1) }}
+          </el-avatar>
+          <span class="author-name">{{ row.author?.name || '未知用户' }}</span>
+        </span>
       </template>
 
       <template #createdAt="{ row }">
@@ -170,5 +212,27 @@ onMounted(fetchList)
         <el-button link type="danger" @click="handleDelete(row)">删除</el-button>
       </template>
     </PageTable>
+
+    <!-- 发帖人信息弹窗（U6）。管理端能看到完整信息，由后端按角色决定 -->
+    <UserProfileDialog v-model="profileOpen" :user-id="profileUserId" :post-id="profilePostId" />
   </el-card>
 </template>
+
+<style scoped>
+.author {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.author-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.author:hover .author-name {
+  color: var(--el-color-primary);
+}
+</style>

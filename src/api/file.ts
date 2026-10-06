@@ -23,7 +23,6 @@ export function uploadFile(
     return delay(300).then(() => mockUploadFile(file))
   }
 
-  // FormData 就是浏览器版的"多部分表单"，用来装二进制文件
   const form = new FormData()
   form.append(UPLOAD_FILE_FIELD, file)
   form.append(UPLOAD_USAGE_FIELD, usage)
@@ -32,7 +31,7 @@ export function uploadFile(
     url: API_FILES_PATH,
     method: 'post',
     data: form,
-    // 让浏览器自己带 boundary，手写 'multipart/form-data' 会把 boundary 弄丢
+
     headers: { 'Content-Type': 'multipart/form-data' },
   })
 }

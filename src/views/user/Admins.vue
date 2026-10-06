@@ -1,5 +1,4 @@
 <script setup lang="ts">
-
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -19,14 +18,12 @@ async function fetchAdmins() {
   try {
     admins.value = await listAdmins()
   } catch {
-    // 提示已由拦截器统一弹过，这里保证不白屏
     admins.value = []
   } finally {
     loading.value = false
   }
 }
 
-/** 发邮件：用 mailto: 直接调起系统邮件客户端（契约要求的"发邮件"入口） */
 function handleMail(admin: AdminContact) {
   if (!admin.email) {
     ElMessage.warning('这位管理员没有公开工作邮箱')
@@ -35,7 +32,6 @@ function handleMail(admin: AdminContact) {
   window.location.href = `mailto:${admin.email}`
 }
 
-/** 私信：走 M4（跳聊天页） */
 function handleMessage(admin: AdminContact) {
   if (!admin.canMessage) {
     ElMessage.warning('暂时无法给这位管理员发私信')
@@ -44,7 +40,6 @@ function handleMessage(admin: AdminContact) {
   router.push(messageChatPath(admin.id))
 }
 
-/** 看主页（U6） */
 function handleProfile(admin: AdminContact) {
   router.push(userProfilePath(admin.id))
 }

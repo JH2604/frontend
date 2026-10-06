@@ -23,7 +23,7 @@ import type {
   SendMessagePayload,
 } from '@/types/api'
 
-export const USE_MOCK = true
+export const USE_MOCK = false
 
 // 模拟网络延迟，让 loading 动画看得见
 export function delay(ms = 300) {

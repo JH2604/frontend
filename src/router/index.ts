@@ -92,6 +92,10 @@ router.beforeEach((to) => {
   const token = localStorage.getItem(STORAGE_KEYS.token)
   const role = localStorage.getItem(STORAGE_KEYS.role)
 
+  if (to.path === ROUTE_LOGIN && token) {
+    return role === 'admin' ? ROUTE_ADMIN_ITEMS : '/'
+  }
+
   if (to.meta.requireAuth && !token) {
     return { path: ROUTE_LOGIN, query: { redirect: to.fullPath } }
   }

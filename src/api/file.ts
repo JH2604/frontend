@@ -32,7 +32,5 @@ export function uploadFile(
     url: API_FILES_PATH,
     method: 'post',
     data: form,
-    // 让浏览器自己带 boundary，手写 'multipart/form-data' 会把 boundary 弄丢
-    headers: { 'Content-Type': 'multipart/form-data' },
   })
 }

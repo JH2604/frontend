@@ -81,19 +81,32 @@ function handleReset() {
 }
 
 async function handleDelete(row: ItemBrief) {
+  let reason: string | undefined
+
   try {
-    await ElMessageBox.confirm(`确定要删除「${row.title}」吗？删掉就找不回来了。`, '删除确认', {
-      type: 'warning',
-      confirmButtonText: '删除',
-      cancelButtonText: '取消',
-    })
+    const { value } = await ElMessageBox.prompt(
+      `确定要删除「${row.title}」吗？删掉就找不回来了。\n\n你可以填写删除理由（可选，最多 200 字）。理由只保存在后台，不会自动私信发帖人。`,
+      '删除确认',
+      {
+        inputPlaceholder: '此处输入删除理由（可选，最多 200 字）',
+        inputValidator: (value) =>
+          value && value.length > 200 ? '删除理由不能超过 200 个字符' : true,
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+      },
+    )
+    const trimmed = (value ?? '').trim()
+    reason = trimmed || undefined
   } catch {
     return
   }
 
-  await deleteItem(row.id)
-  ElMessage.success('已删除')
-  fetchList()
+  try {
+    await deleteItem(row.id, reason)
+    ElMessage.success('已删除')
+    if (list.value.length === 1 && query.page > 1) query.page -= 1
+    fetchList()
+  } catch {}
 }
 
 onMounted(fetchList)

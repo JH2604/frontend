@@ -1,6 +1,6 @@
 export const API_PREFIX = '/api/v1'
 
-export const MESSAGE_KEYS = ['message', 'msg'] as const
+export const MESSAGE_KEYS = ['msg'] as const
 
 export function pickMessage(res: unknown): string | undefined {
   if (!res || typeof res !== 'object') return undefined
@@ -128,6 +128,7 @@ export function userPath(userId: number | string): string {
 export const ROUTE_LOGIN = '/login'
 
 export const API_POSTS_PATH = '/posts'
+export const API_CREATE_POST_PATH = '/auth/post'
 export const API_FILES_PATH = '/files'
 
 /** 拼接 /posts/{id} 这种带 id 的路径 */
@@ -135,7 +136,7 @@ export function postPath(id: number | string): string {
   return `${API_POSTS_PATH}/${id}`
 }
 
-export const LOGIN_ID_FIELD: 'student_id' | 'username' = 'student_id'
+export const LOGIN_ID_FIELD = 'student_id' as const
 
 export const REFRESH_BODY_KEY = 'refresh_token'
 
@@ -304,10 +305,15 @@ export function maskEmail(email: string | null | undefined): string {
 export const PASSWORD_MIN = 8
 export const PASSWORD_MAX = 32
 export const PASSWORD_RULE_TEXT = `${PASSWORD_MIN}~${PASSWORD_MAX} 位，需同时包含字母和数字`
+export const PASSWORD_REGEX = /^(?=.*[A-Za-z])(?=.*\d)\S{8,32}$/
+export const STUDENT_ID_RULE_TEXT = '学号为 admin 或 3~20 位数字'
 
 export function isValidPassword(pwd: string): boolean {
-  if (pwd.length < PASSWORD_MIN || pwd.length > PASSWORD_MAX) return false
-  return /[A-Za-z]/.test(pwd) && /\d/.test(pwd)
+  return PASSWORD_REGEX.test(pwd)
+}
+
+export function isValidStudentId(value: string): boolean {
+  return value === 'admin' || /^\d{3,20}$/.test(value)
 }
 
 /** 某个人的私信聊天页（M3 私信记录） */
@@ -341,8 +347,7 @@ export const CONVERSATION_QUERY_PARAMS = {
 export const MESSAGE_PAGE_SIZE_DEFAULT = 20
 export const MESSAGE_PAGE_SIZE_MAX = 50
 
-/** 私信内容长度。契约 M4 没写上限，我们按经验给一个前端兜底（和有赞的 500 字一致） */
-export const MESSAGE_CONTENT_MAX = 500
+export const MESSAGE_CONTENT_MAX = 1000
 
 /** M4 发送私信时，是否请求"短信 / 邮件提醒对方" */
 export const MESSAGE_REMIND_FIELD = 'remind'

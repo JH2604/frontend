@@ -2,7 +2,6 @@ import type { ContactChannelValue, RoleValue } from '@/utils/contract'
 
 export interface ApiResult<T = unknown> {
   code: number
-  message?: string
   msg?: string
   data: T
 }

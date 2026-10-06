@@ -27,7 +27,15 @@ import {
   mockGetItemList,
   mockUpdateItemStatus,
 } from '@/mock'
-import { API_POSTS_PATH, PAGE_SIZE_DEFAULT, Role, postPath, postStatusPath, type RoleValue } from '@/utils/contract'
+import {
+  API_CREATE_POST_PATH,
+  API_POSTS_PATH,
+  PAGE_SIZE_DEFAULT,
+  Role,
+  postPath,
+  postStatusPath,
+  type RoleValue,
+} from '@/utils/contract'
 
 /** 把后端可能为 null 的地点补成"至少有名字"的对象 */
 function toLocation(raw: RawLocation | null | undefined): Location {
@@ -188,7 +196,7 @@ export async function createItem(payload: CreateItemPayload): Promise<Item> {
   }
   return toItem(
     await http<RawPost>({
-      url: API_POSTS_PATH,
+      url: API_CREATE_POST_PATH,
       method: 'post',
       data: toCreateBody(payload),
     }),

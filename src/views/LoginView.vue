@@ -1,18 +1,26 @@
 <script setup lang="ts">
-import {computed, reactive, ref} from 'vue';
-import {useRouter, useRoute} from 'vue-router';
-import {ElMessage, ElMessageBox, type FormInstance, type FormRules} from 'element-plus';
-import {login, register} from '@/api/auth';
-import {getMyProfile} from '@/api/user';
-import {useUserStore} from '@/stores/user';
-import { PASSWORD_RULE_TEXT, Role, type RoleValue } from '@/utils/contract'
-import {syncThemeFromServer} from '@/utils/theme';
-const PASSWORD_REGEX = /^(?=.*[A-Za-z])(?=.*\d)\S{8,32}$/
-const route =useRoute();
-const router = useRouter();
-const userStore = useUserStore();
+import { computed, reactive, ref } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
+import { login, register } from '@/api/auth'
+import { getMyProfile } from '@/api/user'
+import { useUserStore } from '@/stores/user'
+import {
+  isValidStudentId,
+  PASSWORD_MAX,
+  PASSWORD_REGEX,
+  PASSWORD_RULE_TEXT,
+  Role,
+  STUDENT_ID_RULE_TEXT,
+  type RoleValue,
+} from '@/utils/contract'
+import { syncThemeFromServer } from '@/utils/theme'
 
-const activeTab = ref<'login' | "register">('login')
+const route = useRoute()
+const router = useRouter()
+const userStore = useUserStore()
+
+const activeTab = ref<'login' | 'register'>('login')
 
 const formRef = ref<FormInstance>()
 const loading = ref(false)
@@ -24,29 +32,31 @@ const form = reactive({
   role: Role.STUDENT as RoleValue,
 })
 
-const rules = computed<FormRules>(() =>({
-    studentId: [
-      { required: true, message: '请输入学号', trigger: 'blur' },
-      {
-        validator: (_rule, value: string, callback) => {
-          if (value === 'admin'|| /^\d+$/.test(value)) callback()
-          else callback(new Error('学号必须为数字'))
-        },
-        trigger: 'blur',
+const rules = computed<FormRules>(() => ({
+  studentId: [
+    { required: true, message: '请输入学号', trigger: 'blur' },
+    {
+      validator: (_rule, value: string, callback) => {
+        if (isValidStudentId(value)) callback()
+        else callback(new Error(STUDENT_ID_RULE_TEXT))
       },
-    ],
-    password:
-      activeTab.value === 'register'
-        ?[
-          {required:true, message:'请输入密码', trigger: 'blur'},
-          {pattern:PASSWORD_REGEX, message:PASSWORD_RULE_TEXT, trigger: 'blur'}
+      trigger: 'blur',
+    },
+  ],
+  password:
+    activeTab.value === 'register'
+      ? [
+          { required: true, message: '请输入密码', trigger: 'blur' },
+          { pattern: PASSWORD_REGEX, message: PASSWORD_RULE_TEXT, trigger: 'blur' },
         ]
-      :
-        [{required:true, message:'请输入密码', trigger: 'blur'}],
-    confirmPassword:
-      activeTab.value === 'register'
-        ?[
-          {required:true, message:'请再次输入密码', trigger: 'blur'},
+      : [
+          { required: true, message: '请输入密码', trigger: 'blur' },
+          { max: PASSWORD_MAX, message: `密码最多 ${PASSWORD_MAX} 位`, trigger: 'blur' },
+        ],
+  confirmPassword:
+    activeTab.value === 'register'
+      ? [
+          { required: true, message: '请再次输入密码', trigger: 'blur' },
           {
             validator: (_rule, value: string, callback) => {
               if (value !== form.password) callback(new Error('两次输入的密码不一致'))
@@ -55,26 +65,30 @@ const rules = computed<FormRules>(() =>({
             trigger: 'blur',
           },
         ]
-      :[],
+      : [],
+  role:
+    activeTab.value === 'register'
+      ? [{ required: true, message: '请选择角色', trigger: 'change' }]
+      : [],
 }))
 
-function handleTabChange(){
+function handleTabChange() {
   formRef.value?.clearValidate()
 }
 
-async function handleSubmit(){
+async function handleSubmit() {
   const valid = await formRef.value?.validate().catch(() => false)
-  if(!valid) return
+  if (!valid) return
 
   loading.value = true
   try {
-    if(activeTab.value === "register"){
+    if (activeTab.value === 'register') {
       const res = await register({
         studentId: form.studentId,
         password: form.password,
-        role: form.role
+        role: form.role,
       })
-      await ElMessageBox.alert(`注册成功，你好, ${res.name}!`, '提示', {type:'success'})
+      await ElMessageBox.alert(`注册成功，你好, ${res.name}!`, '提示', { type: 'success' })
       form.password = ''
       form.confirmPassword = ''
       activeTab.value = 'login'
@@ -82,21 +96,21 @@ async function handleSubmit(){
     }
 
     const res = await login({
-      studentId:form.studentId,
-      password:form.password
+      studentId: form.studentId,
+      password: form.password,
     })
     userStore.setLogin(res)
-    try{
+    try {
       const me = await getMyProfile()
       syncThemeFromServer(me.theme)
-    } catch{
-      //未拉到资料时先使用本地缓存的内容
+    } catch {
+      // 未拉到资料时先使用本地缓存的内容
     }
     ElMessage.success(`登录成功，你好, ${res.username}!`)
-    const redirect = (route.query.redirect as string) || (res.role === 'admin' ? '/admin': '/')
+    const redirect = (route.query.redirect as string) || (res.role === 'admin' ? '/admin' : '/')
     router.push(redirect)
   } catch {
-    //错误已经在src/utils/request.ts中处理过了，这里不需要再处理
+    // 错误已经在 src/utils/request.ts 中处理过了，这里不需要再处理
   } finally {
     loading.value = false
   }
@@ -176,5 +190,4 @@ async function handleSubmit(){
 .submit {
   width: 100%;
 }
-
 </style>

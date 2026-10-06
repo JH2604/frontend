@@ -5,9 +5,17 @@ import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'elem
 import { login, register } from '@/api/auth'
 import { getMyProfile } from '@/api/user'
 import { useUserStore } from '@/stores/user'
-import { PASSWORD_RULE_TEXT, Role, type RoleValue } from '@/utils/contract'
+import {
+  isValidStudentId,
+  PASSWORD_MAX,
+  PASSWORD_REGEX,
+  PASSWORD_RULE_TEXT,
+  Role,
+  STUDENT_ID_RULE_TEXT,
+  type RoleValue,
+} from '@/utils/contract'
 import { syncThemeFromServer } from '@/utils/theme'
-const PASSWORD_REGEX = /^(?=.*[A-Za-z])(?=.*\d)\S{8,32}$/
+
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
@@ -29,8 +37,8 @@ const rules = computed<FormRules>(() => ({
     { required: true, message: '请输入学号', trigger: 'blur' },
     {
       validator: (_rule, value: string, callback) => {
-        if (value === 'admin' || /^\d+$/.test(value)) callback()
-        else callback(new Error('学号必须为数字'))
+        if (isValidStudentId(value)) callback()
+        else callback(new Error(STUDENT_ID_RULE_TEXT))
       },
       trigger: 'blur',
     },
@@ -41,7 +49,10 @@ const rules = computed<FormRules>(() => ({
           { required: true, message: '请输入密码', trigger: 'blur' },
           { pattern: PASSWORD_REGEX, message: PASSWORD_RULE_TEXT, trigger: 'blur' },
         ]
-      : [{ required: true, message: '请输入密码', trigger: 'blur' }],
+      : [
+          { required: true, message: '请输入密码', trigger: 'blur' },
+          { max: PASSWORD_MAX, message: `密码最多 ${PASSWORD_MAX} 位`, trigger: 'blur' },
+        ],
   confirmPassword:
     activeTab.value === 'register'
       ? [
@@ -54,6 +65,10 @@ const rules = computed<FormRules>(() => ({
             trigger: 'blur',
           },
         ]
+      : [],
+  role:
+    activeTab.value === 'register'
+      ? [{ required: true, message: '请选择角色', trigger: 'change' }]
       : [],
 }))
 
@@ -88,11 +103,14 @@ async function handleSubmit() {
     try {
       const me = await getMyProfile()
       syncThemeFromServer(me.theme)
-    } catch {}
+    } catch {
+      // 未拉到资料时先使用本地缓存的内容
+    }
     ElMessage.success(`登录成功，你好, ${res.username}!`)
     const redirect = (route.query.redirect as string) || (res.role === 'admin' ? '/admin' : '/')
     router.push(redirect)
   } catch {
+    // 错误已经在 src/utils/request.ts 中处理过了，这里不需要再处理
   } finally {
     loading.value = false
   }

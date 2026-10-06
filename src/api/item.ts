@@ -28,6 +28,7 @@ import {
   mockUpdateItemStatus,
 } from '@/mock'
 import {
+  API_CREATE_POST_PATH,
   API_POSTS_PATH,
   PAGE_SIZE_DEFAULT,
   Role,
@@ -186,7 +187,7 @@ export async function createItem(payload: CreateItemPayload): Promise<Item> {
   }
   return toItem(
     await http<RawPost>({
-      url: API_POSTS_PATH,
+      url: API_CREATE_POST_PATH,
       method: 'post',
       data: toCreateBody(payload),
     }),

@@ -66,6 +66,12 @@ async function scrollToBottom() {
 }
 
 async function fetchConversation() {
+  if (!Number.isFinite(peerId.value) || peerId.value <= 0) {
+    conversation.value = null
+    list.value = []
+    hasMore.value = false
+    return
+  }
   loading.value = true
   try {
     const res = await getConversation(
@@ -125,6 +131,10 @@ function handleScroll() {
 }
 
 async function handleSend() {
+  if (!Number.isFinite(peerId.value) || peerId.value <= 0) {
+    ElMessage.warning('无效的会话对象')
+    return
+  }
   const content = draft.value.trim()
   if (!content) {
     ElMessage.warning('请先写点内容')

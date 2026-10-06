@@ -91,13 +91,11 @@ function handleReset() {
 }
 
 async function handleDelete(row: ItemBrief) {
-  const id = row.id
-  const title = row.title
   let reason: string | undefined
 
   try {
     const { value } = await ElMessageBox.prompt(
-      `确定要删除「${title}」吗？删掉就找不回来了。\n\n你可以填写删除理由（可选），它会通过站内私信告知发帖人。`,
+      `确定要删除「${row.title}」吗？删掉就找不回来了。\n\n你可以填写删除理由（可选，最多 200 字）。理由只保存在后台，不会自动私信发帖人。`,
       '删除确认',
       {
         inputPlaceholder: '此处输入删除理由（可选，最多 200 字）',
@@ -107,7 +105,6 @@ async function handleDelete(row: ItemBrief) {
         cancelButtonText: '取消',
       },
     )
-
     const trimmed = (value ?? '').trim()
     reason = trimmed || undefined
   } catch {
@@ -115,9 +112,8 @@ async function handleDelete(row: ItemBrief) {
   }
 
   try {
-    await deleteItem(id, reason)
+    await deleteItem(row.id, reason)
     ElMessage.success('已删除')
-
     if (list.value.length === 1 && query.page > 1) query.page -= 1
     fetchList()
   } catch {}

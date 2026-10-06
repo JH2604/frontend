@@ -22,7 +22,7 @@ import type {
   SendMessagePayload,
 } from '@/types/api'
 
-export const USE_MOCK = true
+export const USE_MOCK = false
 
 export function delay(ms = 300) {
   return new Promise((resolve) => setTimeout(resolve, ms))

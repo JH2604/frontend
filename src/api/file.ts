@@ -31,7 +31,5 @@ export function uploadFile(
     url: API_FILES_PATH,
     method: 'post',
     data: form,
-
-    headers: { 'Content-Type': 'multipart/form-data' },
   })
 }

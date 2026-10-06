@@ -28,13 +28,36 @@ const form = reactive({
 const rules: FormRules = {
   title: [
     { required: true, message: '请填写标题', trigger: 'blur' },
+    {
+      validator: (_rule, value: string, callback) => {
+        if (!String(value ?? '').trim()) callback(new Error('标题不能全是空格'))
+        else callback()
+      },
+      trigger: 'blur',
+    },
     { max: POST_TITLE_MAX, message: `标题最多 ${POST_TITLE_MAX} 个字`, trigger: 'blur' },
   ],
   content: [
     { required: true, message: '请填写描述', trigger: 'blur' },
+    {
+      validator: (_rule, value: string, callback) => {
+        if (!String(value ?? '').trim()) callback(new Error('描述不能全是空格'))
+        else callback()
+      },
+      trigger: 'blur',
+    },
     { max: POST_CONTENT_MAX, message: `描述最多 ${POST_CONTENT_MAX} 个字`, trigger: 'blur' },
   ],
-  locationName: [{ required: true, message: '请填写地点', trigger: 'blur' }],
+  locationName: [
+    { required: true, message: '请填写地点', trigger: 'blur' },
+    {
+      validator: (_rule, value: string, callback) => {
+        if (!String(value ?? '').trim()) callback(new Error('地点不能全是空格'))
+        else callback()
+      },
+      trigger: 'blur',
+    },
+  ],
 }
 
 function formDirty() {
@@ -71,10 +94,10 @@ async function handleSubmit() {
   try {
     const created = await createItem({
       type: form.type,
-      title: form.title,
-      content: form.content,
+      title: form.title.trim(),
+      content: form.content.trim(),
       images: form.images,
-      location: { name: form.locationName },
+      location: { name: form.locationName.trim() },
       eventTime: form.eventTime ? toIso(form.eventTime) : null,
     })
     submitted.value = true

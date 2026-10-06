@@ -38,6 +38,7 @@ export interface HttpConfig extends AxiosRequestConfig {
 }
 
 service.interceptors.request.use((config) => {
+  config.headers['X-Client-Platform'] = 'web'
   const token = localStorage.getItem(STORAGE_KEYS.token)
   if (token) {
     config.headers.Authorization = `Bearer ${token}`

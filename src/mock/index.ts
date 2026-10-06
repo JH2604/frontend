@@ -22,7 +22,25 @@ import type {
   SendMessagePayload,
 } from '@/types/api'
 
-export const USE_MOCK = true
+/**
+ * 假后端总开关。
+ *
+ * ⚠️ 部署到服务器时必须为 false，否则线上跑的是假数据、根本不会请求后端
+ * （2026-10-05 实测：写死 true 时 dist 里会打进一个 230KB 的 mock chunk，
+ *  index.html 直接加载它 —— 也就是说假数据是真的在跑）。
+ *
+ * 这里按环境自动切换：
+ *   npm run dev            开发构建，import.meta.env.PROD = false -> true  走假数据
+ *   npm run build          生产构建，import.meta.env.PROD = true  -> false 走真后端
+ *
+ * 必须用这种"常量形式"而不是读运行时配置，因为各页面里写的是裸的
+ * `if (USE_MOCK)`；只有它被静态求值为 false，构建工具才能把整个 mock
+ * 模块摇掉（连带 230KB 假数据一起消失）。若改成读 window/全局变量，
+ * 假数据就会继续被打进包里。
+ *
+ * 想在本地用"生产构建 + 假数据"调样式，临时把下面改成 true 即可，别提交。
+ */
+export const USE_MOCK = !import.meta.env.PROD
 
 export function delay(ms = 300) {
   return new Promise((resolve) => setTimeout(resolve, ms))

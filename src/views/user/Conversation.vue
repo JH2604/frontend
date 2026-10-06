@@ -231,7 +231,6 @@ onMounted(() => {
             <div class="bubble">{{ m.content }}</div>
             <div class="time" :title="formatDateTime(m.createdAt)">
               {{ fromNow(m.createdAt) }}
-              <!-- 我发出的消息：is_read 表示"对方读没读"（契约 M2/M3 的说明） -->
               <span v-if="isMine(m)">{{ m.isRead ? ' · 已读' : ' · 未读' }}</span>
               <span v-if="m.reminded" class="remind"> · 已提醒</span>
             </div>

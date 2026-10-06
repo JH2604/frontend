@@ -117,8 +117,7 @@ onMounted(fetchProfile)
           </el-descriptions-item>
         </el-descriptions>
       </template>
-
-      <!-- 普通用户视角：明确说清楚"看不到详细信息"，而不是留一块空白让人以为是 bug -->
+      
       <el-alert
         v-else
         type="info"

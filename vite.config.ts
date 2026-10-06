@@ -5,7 +5,6 @@ import vue from '@vitejs/plugin-vue'
 import vueJsx from '@vitejs/plugin-vue-jsx'
 import vueDevTools from 'vite-plugin-vue-devtools'
 
-// https://vite.dev/config/
 export default defineConfig({
   plugins: [vue(), vueJsx(), vueDevTools()],
   resolve: {
@@ -15,7 +14,6 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      // 所有 /api 开头的请求，转发到后端
       '/api': {
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,

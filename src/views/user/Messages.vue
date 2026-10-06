@@ -145,11 +145,6 @@ onMounted(refreshUnread)
         :class="{ unread: row.direction === 'received' && !row.isRead }"
         @click="handleOpen(row)"
       >
-        <!--
-          头像：点一下弹出对方资料（T11 / U6）。
-          ⚠️ 必须 @click.stop —— 外层 .item 有 @click="handleOpen"（进聊天页），
-             不加 .stop 的话点头像会【同时】弹资料和跳进聊天页两件事都发生。
-        -->
         <el-avatar
           :size="40"
           :src="row.peer.avatarUrl"
@@ -173,7 +168,6 @@ onMounted(refreshUnread)
 
           <div class="content">{{ row.content }}</div>
 
-          <!-- 关联帖子（从帖子详情发起的私信才有） -->
           <div v-if="row.post" class="post" @click.stop="router.push(itemDetailPath(row.post.id))">
             来自帖子：{{ row.post.title }}
           </div>
@@ -191,7 +185,6 @@ onMounted(refreshUnread)
       @current-change="fetchList"
     />
 
-    <!-- 发帖人信息弹窗（U6 / T11）。整页共用一个实例 -->
     <UserProfileDialog v-model="profileOpen" :user-id="profileUserId" />
   </el-card>
 </template>

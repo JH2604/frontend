@@ -200,12 +200,6 @@ onActivated(() => {
       {{ row.location?.name || '—' }}
     </template>
 
-    <!--
-      发布人：头像 + 姓名，点一下弹出资料（U6 / T11）。
-      ⚠️ 这里不用 @click.stop —— 因为整行本来就没有点击事件。
-         如果以后给行加了"点击进详情"，这句就要补上 .stop，
-         否则点头像会同时"弹资料"和"进详情"两件事。
-    -->
     <template #author="{ row }">
       <span class="author" @click="handleOpenProfile(row)">
         <el-avatar :size="24" :src="row.author?.avatarUrl">
@@ -234,7 +228,6 @@ onActivated(() => {
     </template>
   </PageTable>
 
-  <!-- 发帖人信息弹窗（U6）。整张表共用一个实例 -->
   <UserProfileDialog v-model="profileOpen" :user-id="profileUserId" :post-id="profilePostId" />
 </template>
 

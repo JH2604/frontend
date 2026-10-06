@@ -103,14 +103,11 @@ async function handleSubmit() {
     try {
       const me = await getMyProfile()
       syncThemeFromServer(me.theme)
-    } catch {
-      // 未拉到资料时先使用本地缓存的内容
-    }
+    } catch {}
     ElMessage.success(`登录成功，你好, ${res.username}!`)
     const redirect = (route.query.redirect as string) || (res.role === 'admin' ? '/admin' : '/')
     router.push(redirect)
   } catch {
-    // 错误已经在 src/utils/request.ts 中处理过了，这里不需要再处理
   } finally {
     loading.value = false
   }

@@ -1,5 +1,4 @@
 <script setup lang="ts">
-
 import { computed, onActivated, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -8,12 +7,8 @@ import type { TableColumn } from '@/types/table'
 import { deleteItem, getItemList, updateItemStatus } from '@/api/item'
 import PageTable from '@/components/PageTable.vue'
 import StatusTag from '@/components/StatusTag.vue'
-import {
-  PAGE_SIZE_DEFAULT,
-  itemDetailPath,
-  nextStatus,
-  statusActionText,
-} from '@/utils/contract'
+import UserProfileDialog from '@/components/UserProfileDialog.vue'
+import { PAGE_SIZE_DEFAULT, itemDetailPath, nextStatus, statusActionText } from '@/utils/contract'
 import { formatDateTime, fromNow } from '@/utils/format'
 const props = withDefaults(defineProps<{ mine?: boolean }>(), { mine: false })
 
@@ -22,6 +17,16 @@ const router = useRouter()
 const loading = ref(false)
 const total = ref(0)
 const list = ref<ItemBrief[]>([])
+
+const profileOpen = ref(false)
+const profileUserId = ref<number | null>(null)
+const profilePostId = ref<number | undefined>(undefined)
+
+function handleOpenProfile(row: ItemBrief) {
+  profileUserId.value = row.author?.id ?? null
+  profilePostId.value = row.id
+  profileOpen.value = true
+}
 
 const query = reactive({
   page: 1,
@@ -48,6 +53,7 @@ const columns = computed<TableColumn[]>(() => [
   { prop: 'title', label: '标题', minWidth: 180 },
   { label: '类型', width: 90, slot: 'type' },
   { label: '地点', width: 150, slot: 'location' },
+  { label: '发布人', width: 140, slot: 'author' },
   { label: '发布时间', width: 170, slot: 'createdAt' },
   { label: '状态', width: 100, slot: 'status' },
   { label: '操作', width: props.mine ? 280 : 90, slot: 'action' },
@@ -63,14 +69,12 @@ async function fetchList() {
       type: query.type,
       status: query.status,
       order: query.order,
-      // mine 为 true 时后端只返回"我发布的"（文档 P1 的 mine 参数）
+
       mine: props.mine,
     })
     list.value = res.list
     total.value = res.total
   } catch {
-    // 错误提示已经在 utils/request.ts 的拦截器里统一弹过了。
-    // 这里只负责"别让页面白屏"：失败就把列表清空。
     list.value = []
     total.value = 0
   } finally {
@@ -90,17 +94,16 @@ function handleReset() {
   query.order = 'desc'
   handleSearch()
 }
-async function handleToggleStatus(row: ItemBrief)
-{
-  const next =nextStatus(row.status)
+async function handleToggleStatus(row: ItemBrief) {
+  const next = nextStatus(row.status)
   const actionText = statusActionText(row.type, row.status)
   try {
-    await ElMessageBox.confirm(`确定把「${row.title}」${actionText}吗？`, '确认',{
+    await ElMessageBox.confirm(`确定把「${row.title}」${actionText}吗？`, '确认', {
       type: 'warning',
       confirmButtonText: '确认',
       cancelButtonText: '取消',
     })
-  } catch{
+  } catch {
     return
   }
   try {
@@ -109,18 +112,16 @@ async function handleToggleStatus(row: ItemBrief)
     row.closedAt = res.closedAt
     ElMessage.success(`已${actionText}`)
     if (query.status !== 'all') fetchList()
-  } catch {
-    // 错误提示已经在 utils/request.ts 的拦截器里统一弹
-  }
+  } catch {}
 }
 
 async function handleDeleteRow(row: ItemBrief) {
   try {
-    await ElMessageBox.confirm(
-      `确定要删除「${row.title}」吗？删掉就找不回来了。`,
-      '删除确认',
-      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
-    )
+    await ElMessageBox.confirm(`确定要删除「${row.title}」吗？删掉就找不回来了。`, '删除确认', {
+      type: 'warning',
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+    })
   } catch {
     return
   }
@@ -129,9 +130,7 @@ async function handleDeleteRow(row: ItemBrief) {
     ElMessage.success('已删除')
     if (list.value.length === 1 && query.page > 1) query.page -= 1
     fetchList()
-  } catch {
-    // 错误提示已经由拦截器弹出
-  }
+  } catch {}
 }
 
 onMounted(fetchList)
@@ -201,6 +200,21 @@ onActivated(() => {
       {{ row.location?.name || '—' }}
     </template>
 
+    <!--
+      发布人：头像 + 姓名，点一下弹出资料（U6 / T11）。
+      ⚠️ 这里不用 @click.stop —— 因为整行本来就没有点击事件。
+         如果以后给行加了"点击进详情"，这句就要补上 .stop，
+         否则点头像会同时"弹资料"和"进详情"两件事。
+    -->
+    <template #author="{ row }">
+      <span class="author" @click="handleOpenProfile(row)">
+        <el-avatar :size="24" :src="row.author?.avatarUrl">
+          {{ (row.author?.name || '?').slice(0, 1) }}
+        </el-avatar>
+        <span class="author-name">{{ row.author?.name || '未知用户' }}</span>
+      </span>
+    </template>
+
     <template #createdAt="{ row }">
       <span :title="formatDateTime(row.createdAt)">{{ fromNow(row.createdAt) }}</span>
     </template>
@@ -219,4 +233,26 @@ onActivated(() => {
       </template>
     </template>
   </PageTable>
+
+  <!-- 发帖人信息弹窗（U6）。整张表共用一个实例 -->
+  <UserProfileDialog v-model="profileOpen" :user-id="profileUserId" :post-id="profilePostId" />
 </template>
+
+<style scoped>
+.author {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.author-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.author:hover .author-name {
+  color: var(--el-color-primary);
+}
+</style>

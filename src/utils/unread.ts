@@ -1,12 +1,12 @@
-import { ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import { getUnreadCount } from '@/api/message'
 import { useUserStore } from '@/stores/user'
 
 export const unreadTotal = ref(0)
 
-/** 直接设一个值（M5 的返回里带了最新的 unread_total，用它最省一次请求） */
+const POLL_INTERVAL_MS = 30000
+
 export function setUnreadTotal(n: number): void {
-  // 兜底：负数没有意义，NaN / undefined 也当 0
   unreadTotal.value = Number.isFinite(n) && n > 0 ? Math.floor(n) : 0
 }
 
@@ -19,7 +19,24 @@ export async function refreshUnread(): Promise<void> {
   try {
     const res = await getUnreadCount(userStore.userId)
     setUnreadTotal(res.total)
-  } catch {
-    // 静默失败：小红点不是关键路径
+  } catch {}
+}
+
+export function useUnreadPolling(): void {
+  let timer: number | undefined
+
+  function handleVisible() {
+    if (document.visibilityState === 'visible') refreshUnread()
   }
+
+  onMounted(() => {
+    refreshUnread()
+    timer = window.setInterval(refreshUnread, POLL_INTERVAL_MS)
+    document.addEventListener('visibilitychange', handleVisible)
+  })
+
+  onUnmounted(() => {
+    if (timer !== undefined) window.clearInterval(timer)
+    document.removeEventListener('visibilitychange', handleVisible)
+  })
 }

@@ -1,5 +1,4 @@
 <script setup lang="ts">
-
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
@@ -8,6 +7,7 @@ import type { Item, ItemStatus, UserProfile } from '@/types/api'
 import { deleteItem, getItemDetail, updateItemStatus } from '@/api/item'
 import { getUserProfile } from '@/api/user'
 import StatusTag from '@/components/StatusTag.vue'
+import UserProfileDialog from '@/components/UserProfileDialog.vue'
 import { ROUTE_HOME, STATUS_TEXT, messageChatPath } from '@/utils/contract'
 import { formatDateTime, fromNow } from '@/utils/format'
 
@@ -20,21 +20,22 @@ const detail = ref<Item | null>(null)
 const authorProfile = ref<UserProfile | null>(null)
 const profileLoading = ref(false)
 
-/** U6 查发帖人的联系能力（拿到 canMessage / canRemind） */
+const profileOpen = ref(false)
+
 async function fetchAuthorProfile(authorId: number) {
   profileLoading.value = true
   try {
     authorProfile.value = await getUserProfile(authorId)
   } catch {
-    // 查不到就当"不能私信"（fail-closed）：提示已经由拦截器弹过了，
-    // 这里静默降级，绝不让"查用户失败"把整个详情页搞崩。
     authorProfile.value = null
   } finally {
     profileLoading.value = false
   }
 }
 
-const targetStatus = computed<ItemStatus>(() => (detail.value?.status === 'open' ? 'closed' : 'open'))
+const targetStatus = computed<ItemStatus>(() =>
+  detail.value?.status === 'open' ? 'closed' : 'open',
+)
 
 const actionText = computed(() => {
   if (!detail.value) return ''
@@ -46,12 +47,9 @@ async function fetchDetail() {
   loading.value = true
   try {
     detail.value = await getItemDetail(Number(route.params.id))
-    // 详情拿到之后再查发帖人的联系能力（不需要等它，界面先出来）
+
     fetchAuthorProfile(detail.value.author.id)
   } catch (err) {
-    // 后端返回 40400（资源不存在）时走到这个分支。
-    // 关键点：绝不能白屏 —— 把 detail 置成 null，
-    // 下面的模板就会渲染"没有找到这条信息"那张空状态卡片。
     detail.value = null
     authorProfile.value = null
     ElMessage.error(err instanceof Error ? err.message : '这条信息不存在或已被删除')
@@ -80,34 +78,32 @@ async function handleToggleStatus() {
       cancelButtonText: '取消',
     })
   } catch {
-    // 点了取消，什么都不做
     return
   }
 
   try {
     await updateItemStatus(detail.value.id, target)
     ElMessage.success(`已标记为${text}`)
-    // P5 只返回三个字段，所以必须重新拉详情（见上面第 2 点的说明）
+
     fetchDetail()
-  } catch {
-    // 错误提示已经在 utils/request.ts 的拦截器里统一弹过了
-  }
+  } catch {}
 }
 async function handleDelete() {
-  if(!detail.value) return
+  if (!detail.value) return
   const title = detail.value.title
   const id = detail.value.id
   const adminDeletingOthers = userStore.isAdmin && !detail.value.isMine
   let reason: string | undefined
 
-  try{
-    if(adminDeletingOthers){
-      const {value} = await ElMessageBox.prompt(
+  try {
+    if (adminDeletingOthers) {
+      const { value } = await ElMessageBox.prompt(
         `确定要删除「${title}」吗？删掉就找不回来了。\n\n请输入删除理由（可选）`,
         '删除确认',
         {
           inputPlaceholder: '此处输入删除理由（可选）',
-          inputValidator:(value) => (value&&value.length > 200 ? '删除理由不能超过 200 个字符' : true),
+          inputValidator: (value) =>
+            value && value.length > 200 ? '删除理由不能超过 200 个字符' : true,
           confirmButtonText: '删除',
           cancelButtonText: '取消',
         },
@@ -115,17 +111,17 @@ async function handleDelete() {
       const trimmed = (value ?? '').trim()
       reason = trimmed || undefined
     } else {
-      await ElMessageBox.confirm(
-        `确定要删除「${title}」吗？删掉就找不回来了。`,
-        '删除确认',
-        { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
-      )
+      await ElMessageBox.confirm(`确定要删除「${title}」吗？删掉就找不回来了。`, '删除确认', {
+        type: 'warning',
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+      })
     }
   } catch {
     return
   }
 
-  try{
+  try {
     await deleteItem(id, reason)
     ElMessage.success('已删除')
     if (window.history.length > 1) {
@@ -133,9 +129,7 @@ async function handleDelete() {
     } else {
       router.push(ROUTE_HOME)
     }
-  } catch{
-    // 错误提示已经在 utils/request.ts 的拦截器里统一弹过了，此处省略弹错误。
-  }
+  } catch {}
 }
 
 onMounted(fetchDetail)
@@ -169,7 +163,14 @@ onMounted(fetchDetail)
           <span :title="formatDateTime(detail.createdAt)">{{ fromNow(detail.createdAt) }}</span>
         </el-descriptions-item>
 
-        <el-descriptions-item label="发布人">{{ detail.author.name }}</el-descriptions-item>
+        <el-descriptions-item label="发布人">
+          <span class="author" @click="profileOpen = true">
+            <el-avatar :size="22" :src="detail.author.avatarUrl">
+              {{ detail.author.name.slice(0, 1) }}
+            </el-avatar>
+            <span class="author-name">{{ detail.author.name }}</span>
+          </span>
+        </el-descriptions-item>
         <el-descriptions-item label="编号">{{ detail.id }}</el-descriptions-item>
 
         <el-descriptions-item label="完结时间">
@@ -197,7 +198,6 @@ onMounted(fetchDetail)
       </div>
 
       <div class="actions">
-
         <el-button
           v-if="authorProfile?.canMessage && !detail.isMine"
           :loading="profileLoading"
@@ -220,6 +220,13 @@ onMounted(fetchDetail)
     </el-card>
 
     <el-empty v-else-if="!loading" description="没有找到这条信息" />
+
+    <UserProfileDialog
+      v-if="detail"
+      v-model="profileOpen"
+      :user-id="detail.author.id"
+      :post-id="detail.id"
+    />
   </div>
 </template>
 
@@ -244,6 +251,17 @@ onMounted(fetchDetail)
 .tags {
   display: flex;
   gap: 8px;
+}
+
+.author {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.author:hover .author-name {
+  color: var(--el-color-primary);
 }
 
 .content {

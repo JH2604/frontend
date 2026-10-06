@@ -1,6 +1,5 @@
 <script setup lang="ts">
-
-import { computed,ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { UploadRequestOptions, UploadUserFile } from 'element-plus'
 import { uploadFile } from '@/api/file'
@@ -10,11 +9,10 @@ const model = defineModel<string[]>({ default: () => [] })
 
 const props = withDefaults(
   defineProps<{
-    /** 最多几张 */
     limit?: number
-    /** 单张最大多少 MB */
+
     maxMb?: number
-    /** 用途，决定后端按哪个尺寸上限校验（文档 F1） */
+
     usage?: 'avatar' | 'post'
   }>(),
   {
@@ -72,9 +70,7 @@ watch(
     >
       <span class="plus">+</span>
     </el-upload>
-    <div class="tip">
-      最多 {{ props.limit }} 张，单张不超过 {{ props.maxMb }}MB。
-    </div>
+    <div class="tip">最多 {{ props.limit }} 张，单张不超过 {{ props.maxMb }}MB。</div>
   </div>
 </template>
 

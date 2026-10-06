@@ -1,5 +1,4 @@
 <script setup lang="ts">
-
 import { reactive, ref } from 'vue'
 import { onBeforeRouteLeave, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
@@ -14,14 +13,14 @@ const router = useRouter()
 const formRef = ref<FormInstance>()
 const loading = ref(false)
 const submitted = ref(false)
-const uploaderRef = ref<{ uploading: boolean }| null>(null)
+const uploaderRef = ref<{ uploading: boolean } | null>(null)
 
 const form = reactive({
   type: 'lost' as ItemType,
   title: '',
   content: '',
   locationName: '',
-  // el-date-picker 的值默认是 Date 对象；提交时用 toIso() 转成带时区的字符串
+
   eventTime: null as Date | null,
   images: [] as string[],
 })
@@ -61,13 +60,13 @@ const rules: FormRules = {
   ],
 }
 
-function formDirty(){
+function formDirty() {
   return (
     form.title.trim() !== '' ||
     form.content.trim() !== '' ||
     form.locationName.trim() !== '' ||
     form.eventTime !== null ||
-    form.images.length > 0 
+    form.images.length > 0
   )
 }
 async function handleSubmit() {
@@ -168,11 +167,11 @@ onBeforeRouteLeave(async () => {
         />
       </el-form-item>
       <el-alert
-          type="info"
-          :closable="false"
-          title="请不要在描述里填写手机号等联系方式，统一通过站内私信联系"
-          show-icon
-        />
+        type="info"
+        :closable="false"
+        title="请不要在描述里填写手机号等联系方式，统一通过站内私信联系"
+        show-icon
+      />
 
       <el-form-item label="图片">
         <ImageUploader ref="uploaderRef" v-model="form.images" />

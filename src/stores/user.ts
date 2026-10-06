@@ -16,8 +16,6 @@ export interface UserInfo {
 }
 
 export const useUserStore = defineStore('user', () => {
-  // ---------- 状态（会被界面盯着的数据） ----------
-
   const token = ref(localStorage.getItem(STORAGE_KEYS.token) ?? '')
 
   const role = ref<UserRole>((localStorage.getItem(STORAGE_KEYS.role) as UserRole) || Role.STUDENT)
@@ -26,10 +24,8 @@ export const useUserStore = defineStore('user', () => {
 
   const userId = ref(Number(localStorage.getItem(STORAGE_KEYS.userId)) || 0)
 
-  const isLogin = computed(() => !!token.value) // !! 把任意值变成布尔
+  const isLogin = computed(() => !!token.value)
   const isAdmin = computed(() => role.value === 'admin')
-
-  // ---------- 动作（会修改状态的方法） ----------
 
   function setLogin(info: UserInfo) {
     token.value = info.token
@@ -40,7 +36,7 @@ export const useUserStore = defineStore('user', () => {
     localStorage.setItem(STORAGE_KEYS.token, info.token)
     localStorage.setItem(STORAGE_KEYS.role, info.role)
     localStorage.setItem(STORAGE_KEYS.username, info.username)
-    // localStorage 只能存字符串，数字会自动转过去，读的时候再转回来
+
     localStorage.setItem(STORAGE_KEYS.userId, String(info.userId))
 
     if (info.refreshToken) {
@@ -50,10 +46,9 @@ export const useUserStore = defineStore('user', () => {
     clearCache()
   }
 
-  /** 退出登录：内存 + localStorage 一起清，缓存也要清 */
   function logout() {
     token.value = ''
-    role.value = Role.STUDENT // ⚠️ 注意回到 STUDENT，不是保留原角色
+    role.value = Role.STUDENT
     username.value = ''
     userId.value = 0
 
@@ -63,7 +58,6 @@ export const useUserStore = defineStore('user', () => {
     localStorage.removeItem(STORAGE_KEYS.username)
     localStorage.removeItem(STORAGE_KEYS.userId)
 
-    // 不清缓存的话，换个账号登录还能看到上一个人看过的物品列表
     clearCache()
   }
 

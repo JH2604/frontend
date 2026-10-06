@@ -1,10 +1,8 @@
 <script setup lang="ts">
-
-import { onMounted, onUnmounted } from 'vue'
 import { RouterView, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { logoutApi } from '@/api/auth'
-import { unreadTotal, refreshUnread } from '@/utils/unread'
+import { unreadTotal, useUnreadPolling } from '@/utils/unread'
 import {
   ROUTE_ADMINS,
   ROUTE_HOME,
@@ -18,14 +16,12 @@ import {
 
 const router = useRouter()
 
-// useUserStore()：拿到全局登录态（见 stores/user.ts）
 const userStore = useUserStore()
 
 const goPublish = () => {
   router.push(ROUTE_PUBLISH)
 }
 
-/** 点自己的头像 / 用户名 -> 自己的用户主页（U6） */
 const goMyProfile = () => {
   if (!userStore.userId) return
   router.push(userProfilePath(userStore.userId))
@@ -34,31 +30,14 @@ const goMyProfile = () => {
 const logout = async () => {
   await logoutApi().catch(() => undefined)
   userStore.logout()
-  unreadTotal.value = 0 // 顺手把小红点清零
+  unreadTotal.value = 0
   router.push(ROUTE_LOGIN)
 }
 
-let timer: number | undefined
-
-function handleVisible() {
-  // 只在"切回前台"时刷新；切到后台时什么都不做
-  if (document.visibilityState === 'visible') refreshUnread()
-}
-
-onMounted(() => {
-  refreshUnread()
-  timer = window.setInterval(refreshUnread, 30000)
-  document.addEventListener('visibilitychange', handleVisible)
-})
-
-onUnmounted(() => {
-  if (timer !== undefined) window.clearInterval(timer)
-  document.removeEventListener('visibilitychange', handleVisible)
-})
+useUnreadPolling()
 </script>
 
 <template>
-
   <el-container class="layout">
     <el-header class="header">
       <span class="logo">校园失物招领</span>
@@ -75,12 +54,7 @@ onUnmounted(() => {
         <el-menu-item :index="ROUTE_MESSAGES">
           消息
 
-          <el-badge
-            :value="unreadTotal"
-            :max="99"
-            :hidden="unreadTotal === 0"
-            class="badge"
-          />
+          <el-badge :value="unreadTotal" :max="99" :hidden="unreadTotal === 0" class="badge" />
         </el-menu-item>
         <el-menu-item :index="ROUTE_ADMINS">联系管理员</el-menu-item>
         <el-menu-item :index="ROUTE_SETTINGS">用户中心</el-menu-item>
@@ -98,7 +72,6 @@ onUnmounted(() => {
     </el-header>
 
     <el-main>
-
       <RouterView v-slot="{ Component }">
         <keep-alive :include="['ItemList', 'MyPosts', 'Messages']">
           <component :is="Component" />
@@ -109,9 +82,7 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-
 .layout {
-
   min-height: 100vh;
 }
 
@@ -125,12 +96,11 @@ onUnmounted(() => {
 .logo {
   font-size: 18px;
   font-weight: 600;
-  /* nowrap：不换行（不然窗口变窄时"校园失物招领"会被折成两行） */
+
   white-space: nowrap;
 }
 
 .menu {
-
   flex: 1;
   border-bottom: none;
 }

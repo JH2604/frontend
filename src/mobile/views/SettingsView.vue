@@ -2,7 +2,7 @@
 import { onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { uploadFile } from '@/api/file'
-import { bindContact, changeMyPassword, getMyProfile, sendVerificationCode } from '@/api/user'
+import { bindContact, changeMyPassword, getMyProfile, sendVerificationCode, updateMe } from '@/api/user'
 import type { UserMe } from '@/types/api'
 import { useUserStore } from '@/stores/user'
 import {
@@ -143,8 +143,10 @@ async function onAvatar(event: Event) {
     return
   }
   try {
-    await uploadFile(file, 'avatar')
-    bridge.toast('图片已上传，账号头像还不能更新')
+    const uploaded = await uploadFile(file, 'avatar')
+    me.value = await updateMe({ avatarUrl: uploaded.url })
+    await bridge.reloadProfile()
+    bridge.toast('头像已更新')
   } catch {
     // 失败提示由请求拦截器弹出
   }

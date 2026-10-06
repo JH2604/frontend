@@ -3,9 +3,11 @@ import { onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import type { Theme, UserMe } from '@/types/api'
-import { bindContact, changeMyPassword, getMyProfile, sendVerificationCode } from '@/api/user'
+import { uploadFile } from '@/api/file'
+import { bindContact, changeMyPassword, getMyProfile, sendVerificationCode, updateMe } from '@/api/user'
 import { useUserStore } from '@/stores/user'
 import {
+  AVATAR_MAX_MB,
   ContactChannel,
   EMAIL_REGEX,
   PASSWORD_REGEX,
@@ -34,6 +36,9 @@ const themeOptions: { label: string; value: Theme }[] = [
 ]
 
 const theme = ref<Theme>(themePreference.value)
+
+const avatarInput = ref<HTMLInputElement | null>(null)
+const avatarUploading = ref(false)
 
 const pwdFormRef = ref<FormInstance>()
 const pwdForm = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' })
@@ -171,6 +176,31 @@ async function handleChangePassword() {
   }
 }
 
+async function onAvatar(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+    ElMessage.warning('只支持 JPEG / PNG / WebP')
+    return
+  }
+  if (file.size > AVATAR_MAX_MB * 1024 * 1024) {
+    ElMessage.warning(`头像不能超过 ${AVATAR_MAX_MB}MB`)
+    return
+  }
+  avatarUploading.value = true
+  try {
+    const uploaded = await uploadFile(file, 'avatar')
+    me.value = await updateMe({ avatarUrl: uploaded.url })
+    ElMessage.success('头像已更新')
+  } catch {
+    // 提示已由拦截器弹出
+  } finally {
+    avatarUploading.value = false
+  }
+}
+
 onMounted(fetchMe)
 onUnmounted(clearCountdown)
 </script>
@@ -182,12 +212,19 @@ onUnmounted(clearCountdown)
     <el-card v-if="me">
       <div class="profile">
         <div class="avatar-block">
-          <el-avatar :size="96" :src="me.avatarUrl">
-            {{ me.name.slice(0, 1) }}
-          </el-avatar>
-          <div class="hint block-hint">
-            图片上传接口维护中
-          </div>
+          <button type="button" class="avatar-btn" :disabled="avatarUploading" @click="avatarInput?.click()">
+            <el-avatar :size="96" :src="me.avatarUrl">
+              {{ me.name.slice(0, 1) }}
+            </el-avatar>
+          </button>
+          <div class="hint block-hint">点击更换头像</div>
+          <input
+            ref="avatarInput"
+            hidden
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            @change="onAvatar"
+          />
         </div>
 
         <el-descriptions :column="1" border class="info">
@@ -322,6 +359,13 @@ onUnmounted(clearCountdown)
 .avatar-block {
   width: 220px;
   flex-shrink: 0;
+}
+
+.avatar-btn {
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
 }
 
 .info {

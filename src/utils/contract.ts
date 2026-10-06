@@ -285,6 +285,8 @@ export function maskEmail(email: string | null | undefined): string {
   return `${name.slice(0, 2)}***${domain}`
 }
 
+export const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
 export const PASSWORD_MIN = 8
 export const PASSWORD_MAX = 32
 export const PASSWORD_RULE_TEXT = `${PASSWORD_MIN}~${PASSWORD_MAX} 位，需同时包含字母和数字`

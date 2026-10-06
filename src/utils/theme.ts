@@ -48,8 +48,3 @@ export function initTheme(): void {
   }
 }
 
-export function syncThemeFromServer(pref: Theme | null | undefined): void {
-  if (pref !== 'light' && pref !== 'dark' && pref !== 'system') return
-  localStorage.setItem(STORAGE_KEYS.theme, pref)
-  applyTheme(pref)
-}

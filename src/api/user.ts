@@ -47,7 +47,12 @@ function toRole(raw: string | null | undefined): RoleValue {
 
 function toTheme(raw: string | null | undefined): UserMe['theme'] {
   if (raw === 'light' || raw === 'dark' || raw === 'system') return raw
-  return 'system'
+  return 'light'
+}
+
+function blankToNull(value: string | null | undefined): string | null {
+  const text = value?.trim() ?? ''
+  return text ? text : null
 }
 
 function toUserMe(raw: RawUserMe): UserMe {
@@ -57,8 +62,8 @@ function toUserMe(raw: RawUserMe): UserMe {
     name: raw.name ?? '未知用户',
     avatarUrl: raw.avatar_url ?? '',
     role: toRole(raw.role),
-    phone: raw.phone ?? null,
-    email: raw.email ?? null,
+    phone: blankToNull(raw.phone),
+    email: blankToNull(raw.email),
     allowRemind: raw.allow_remind ?? true,
     theme: toTheme(raw.theme),
     postCount: raw.post_count ?? 0,
@@ -68,8 +73,8 @@ function toUserMe(raw: RawUserMe): UserMe {
 
 function toContactResult(raw: RawContactResult | null | undefined): ContactResult {
   return {
-    phone: raw?.phone ?? null,
-    email: raw?.email ?? null,
+    phone: blankToNull(raw?.phone),
+    email: blankToNull(raw?.email),
   }
 }
 
@@ -79,7 +84,7 @@ function toAdminContact(raw: RawAdminContact): AdminContact {
     name: raw.name ?? '管理员',
     avatarUrl: raw.avatar_url ?? '',
     role: toRole(raw.role),
-    email: raw.email ?? null,
+    email: blankToNull(raw.email),
 
     canMessage: raw.can_message ?? false,
   }
@@ -89,8 +94,8 @@ function toUserDetail(raw: RawUserProfile['detail']): UserProfile['detail'] {
   if (!raw) return null
   return {
     studentId: raw.student_id ?? '',
-    phone: raw.phone ?? null,
-    email: raw.email ?? null,
+    phone: blankToNull(raw.phone),
+    email: blankToNull(raw.email),
     allowRemind: raw.allow_remind ?? false,
     createdAt: raw.created_at ?? '',
     lastLoginAt: raw.last_login_at ?? '',

@@ -3,7 +3,6 @@ import { computed, reactive, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { login, register } from '@/api/auth'
-import { getMyProfile } from '@/api/user'
 import { useUserStore } from '@/stores/user'
 import {
   isValidStudentId,
@@ -14,7 +13,6 @@ import {
   STUDENT_ID_RULE_TEXT,
   type RoleValue,
 } from '@/utils/contract'
-import { syncThemeFromServer } from '@/utils/theme'
 
 const route = useRoute()
 const router = useRouter()
@@ -133,7 +131,7 @@ async function handleSubmit() {
           <el-input
             v-model="form.password"
             type="password"
-            placeholder="密码（8~32 位，含字母和数字）"
+            :placeholder="activeTab === 'register' ? PASSWORD_RULE_TEXT : '密码'"
             show-password
             @keyup.enter="handleSubmit"
           />

@@ -60,7 +60,6 @@ onMounted(fetchAdmins)
 
       <div class="body">
         <div class="name">{{ admin.name }}</div>
-
         <div class="email">
           <span v-if="admin.email">{{ admin.email }}</span>
           <span v-else class="none">未公开工作邮箱</span>
@@ -82,7 +81,6 @@ onMounted(fetchAdmins)
       :closable="false"
       show-icon
       title="没绑定邮箱的管理员只能站内私信联系"
-      description="这也是为什么有的管理员只显示「私信」按钮 —— 前端不会给一个点了没反应的入口。"
     />
   </el-card>
 </template>

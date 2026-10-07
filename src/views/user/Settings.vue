@@ -1,20 +1,25 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import type { Theme, UserMe } from '@/types/api'
-import { changeMyPassword, getMyProfile } from '@/api/user'
+import { uploadFile } from '@/api/file'
+import { bindContact, changeMyPassword, getMyProfile, sendVerificationCode, updateMe } from '@/api/user'
 import { useUserStore } from '@/stores/user'
 import {
+  AVATAR_MAX_MB,
+  ContactChannel,
+  EMAIL_REGEX,
   PASSWORD_REGEX,
   PASSWORD_RULE_TEXT,
   ROUTE_LOGIN,
   ROUTE_SETTINGS,
+  VERIFICATION_CODE_LENGTH,
   maskEmail,
   maskPhone,
 } from '@/utils/contract'
 import { formatDateTime, fromNow } from '@/utils/format'
-import { setThemeLocal, syncThemeFromServer } from '@/utils/theme'
+import { setThemeLocal, themePreference } from '@/utils/theme'
 
 defineOptions({ name: 'Settings' })
 
@@ -30,7 +35,10 @@ const themeOptions: { label: string; value: Theme }[] = [
   { label: '跟随系统', value: 'system' },
 ]
 
-const theme = ref<Theme>('system')
+const theme = ref<Theme>(themePreference.value)
+
+const avatarInput = ref<HTMLInputElement | null>(null)
+const avatarUploading = ref(false)
 
 const pwdFormRef = ref<FormInstance>()
 const pwdForm = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' })
@@ -63,8 +71,6 @@ async function fetchMe() {
   try {
     const res = await getMyProfile()
     me.value = res
-    theme.value = res.theme
-    syncThemeFromServer(res.theme)
   } catch {
     me.value = null
   } finally {
@@ -76,7 +82,78 @@ function handleThemeRadioChange(next: string | number | boolean | undefined) {
   if (next !== 'light' && next !== 'dark' && next !== 'system') return
   setThemeLocal(next)
   theme.value = next
-  ElMessage.success('主题已在本机生效（当前后端未提供保存接口）')
+}
+
+const emailForm = reactive({ target: '', code: '' })
+const codeSending = ref(false)
+const binding = ref(false)
+const countdown = ref(0)
+const sentTarget = ref('')
+let countdownTimer: ReturnType<typeof setInterval> | undefined
+
+function clearCountdown() {
+  if (!countdownTimer) return
+  clearInterval(countdownTimer)
+  countdownTimer = undefined
+}
+
+function startCountdown(seconds: number) {
+  clearCountdown()
+  countdown.value = seconds
+  countdownTimer = setInterval(() => {
+    countdown.value -= 1
+    if (countdown.value <= 0) clearCountdown()
+  }, 1000)
+}
+
+async function handleSendEmailCode() {
+  const target = emailForm.target.trim()
+  if (!EMAIL_REGEX.test(target)) {
+    ElMessage.warning('请输入正确的邮箱')
+    return
+  }
+
+  codeSending.value = true
+  try {
+    await sendVerificationCode({ channel: ContactChannel.EMAIL, target })
+    sentTarget.value = target
+    startCountdown(60)
+    ElMessage.success('验证码已发送，10 分钟内有效')
+  } catch {
+    // 提示已由拦截器弹出
+  } finally {
+    codeSending.value = false
+  }
+}
+
+async function handleBindEmail() {
+  const target = emailForm.target.trim()
+  const code = emailForm.code.trim()
+  if (!EMAIL_REGEX.test(target)) {
+    ElMessage.warning('请输入正确的邮箱')
+    return
+  }
+  if (!new RegExp(`^\\d{${VERIFICATION_CODE_LENGTH}}$`).test(code)) {
+    ElMessage.warning(`请输入 ${VERIFICATION_CODE_LENGTH} 位验证码`)
+    return
+  }
+  if (sentTarget.value && target !== sentTarget.value) {
+    ElMessage.warning('邮箱已修改，请重新获取验证码')
+    return
+  }
+
+  binding.value = true
+  try {
+    await bindContact({ channel: ContactChannel.EMAIL, target, code })
+    ElMessage.success('邮箱已绑定')
+    emailForm.code = ''
+    sentTarget.value = ''
+    await fetchMe()
+  } catch {
+    // 提示已由拦截器弹出
+  } finally {
+    binding.value = false
+  }
 }
 
 async function handleChangePassword() {
@@ -99,7 +176,33 @@ async function handleChangePassword() {
   }
 }
 
+async function onAvatar(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+    ElMessage.warning('只支持 JPEG / PNG / WebP')
+    return
+  }
+  if (file.size > AVATAR_MAX_MB * 1024 * 1024) {
+    ElMessage.warning(`头像不能超过 ${AVATAR_MAX_MB}MB`)
+    return
+  }
+  avatarUploading.value = true
+  try {
+    const uploaded = await uploadFile(file, 'avatar')
+    me.value = await updateMe({ avatarUrl: uploaded.url })
+    ElMessage.success('头像已更新')
+  } catch {
+    // 提示已由拦截器弹出
+  } finally {
+    avatarUploading.value = false
+  }
+}
+
 onMounted(fetchMe)
+onUnmounted(clearCountdown)
 </script>
 
 <template>
@@ -109,24 +212,34 @@ onMounted(fetchMe)
     <el-card v-if="me">
       <div class="profile">
         <div class="avatar-block">
-          <el-avatar :size="96" :src="me.avatarUrl">
-            {{ me.name.slice(0, 1) }}
-          </el-avatar>
-          <div class="hint block-hint">头像保存接口本期未开放</div>
+          <button type="button" class="avatar-btn" :disabled="avatarUploading" @click="avatarInput?.click()">
+            <el-avatar :size="96" :src="me.avatarUrl">
+              {{ me.name.slice(0, 1) }}
+            </el-avatar>
+          </button>
+          <div class="hint block-hint">点击更换头像</div>
+          <input
+            ref="avatarInput"
+            hidden
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            @change="onAvatar"
+          />
         </div>
 
         <el-descriptions :column="1" border class="info">
           <el-descriptions-item label="姓名">
             {{ me.name }}
-            <span class="hint">（实名，不可修改）</span>
+            <span class="hint">不可修改</span>
           </el-descriptions-item>
           <el-descriptions-item label="学号">
             {{ me.studentId }}
-            <span class="hint">（不可修改）</span>
+            <span class="hint">不可修改</span>
           </el-descriptions-item>
           <el-descriptions-item label="手机号">
             <span v-if="me.phone" :title="me.phone">{{ maskPhone(me.phone) }}</span>
             <span v-else class="hint">未绑定</span>
+            <span class="hint">短信验证码当前版本暂不支持（审批太麻烦啦）</span>
           </el-descriptions-item>
           <el-descriptions-item label="邮箱">
             <span v-if="me.email" :title="me.email">{{ maskEmail(me.email) }}</span>
@@ -149,24 +262,47 @@ onMounted(fetchMe)
               {{ o.label }}
             </el-radio-button>
           </el-radio-group>
-          <span class="hint">只保存在本机，换设备不会同步</span>
         </el-form-item>
 
         <el-form-item label="私信提醒">
           <el-switch :model-value="me.allowRemind" disabled />
-          <span class="hint">开关保存接口本期未开放</span>
+          <span class="hint">
+            当前是 {{ me.allowRemind ? '开启' : '关闭' }}
+          </span>
         </el-form-item>
       </el-form>
 
       <el-divider />
 
-      <div class="section-title">绑定手机号 / 邮箱</div>
-      <el-alert
-        type="info"
-        :closable="false"
-        title="绑定接口本期未开放。当前后端没有验证码和联系方式接口。"
-        show-icon
-      />
+      <div class="section-title">绑定邮箱</div>
+      <el-form label-width="120px" class="pwd-form" @submit.prevent>
+        <el-form-item label="邮箱">
+          <div class="bind-row">
+            <el-input v-model="emailForm.target" placeholder="新的邮箱地址" clearable />
+            <el-button
+              :disabled="countdown > 0"
+              :loading="codeSending"
+              @click="handleSendEmailCode"
+            >
+              {{ countdown > 0 ? `${countdown}s 后重发` : '获取验证码' }}
+            </el-button>
+          </div>
+        </el-form-item>
+        <el-form-item label="验证码">
+          <el-input
+            v-model="emailForm.code"
+            :maxlength="VERIFICATION_CODE_LENGTH"
+            placeholder="6 位验证码"
+            clearable
+          />
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" :loading="binding" @click="handleBindEmail">
+            {{ me.email ? '修改邮箱' : '绑定邮箱' }}
+          </el-button>
+          <span class="hint">验证码 10 分钟内有效，60 秒后可以重发</span>
+        </el-form-item>
+      </el-form>
 
       <el-divider />
 
@@ -196,7 +332,7 @@ onMounted(fetchMe)
           <el-button type="danger" :loading="pwdLoading" @click="handleChangePassword">
             修改密码
           </el-button>
-          <span class="hint">改完所有设备都会下线，需要重新登录</span>
+          <span class="hint">修改密码后所有设备均下线，需重新登录</span>
         </el-form-item>
       </el-form>
     </el-card>
@@ -225,6 +361,13 @@ onMounted(fetchMe)
   flex-shrink: 0;
 }
 
+.avatar-btn {
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
 .info {
   flex: 1;
 }
@@ -247,6 +390,12 @@ onMounted(fetchMe)
 
 .pwd-form {
   max-width: 620px;
+}
+
+.bind-row {
+  display: flex;
+  gap: 8px;
+  width: 100%;
 }
 
 .route-note {

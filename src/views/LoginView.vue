@@ -98,10 +98,6 @@ async function handleSubmit() {
       password: form.password,
     })
     userStore.setLogin(res)
-    try {
-      const me = await getMyProfile()
-      syncThemeFromServer(me.theme)
-    } catch {}
     ElMessage.success(`登录成功，你好, ${res.username}!`)
     const redirect = (route.query.redirect as string) || (res.role === 'admin' ? '/admin' : '/')
     router.push(redirect)

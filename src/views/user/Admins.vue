@@ -60,6 +60,7 @@ onMounted(fetchAdmins)
 
       <div class="body">
         <div class="name">{{ admin.name }}</div>
+
         <div class="email">
           <span v-if="admin.email">{{ admin.email }}</span>
           <span v-else class="none">未公开工作邮箱</span>

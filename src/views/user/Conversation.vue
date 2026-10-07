@@ -230,6 +230,7 @@ onMounted(() => {
             <div class="bubble">{{ m.content }}</div>
             <div class="time" :title="formatDateTime(m.createdAt)">
               {{ fromNow(m.createdAt) }}
+
               <span v-if="isMine(m)">{{ m.isRead ? ' · 已读' : ' · 未读' }}</span>
               <span v-if="m.reminded" class="remind"> · 已提醒</span>
             </div>

@@ -117,6 +117,7 @@ onMounted(fetchProfile)
           </el-descriptions-item>
         </el-descriptions>
       </template>
+
       <el-alert
         v-else
         type="info"

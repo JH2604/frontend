@@ -22,7 +22,7 @@ import type {
   SendMessagePayload,
 } from '@/types/api'
 
-export const USE_MOCK = false
+export const USE_MOCK = !import.meta.env.PROD
 
 export function delay(ms = 300) {
   return new Promise((resolve) => setTimeout(resolve, ms))

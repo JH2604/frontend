@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import UserLayout from '@/layouts/UserLayout.vue'
 import AdminLayout from '@/layouts/AdminLayout.vue'
+import { isMobileViewport, MOBILE_MEDIA, toDesktopLocation, toMobileLocation } from '@/mobile/device'
 import { ROUTE_ADMIN_ITEMS, ROUTE_LOGIN, STORAGE_KEYS } from '@/utils/contract'
 
 const router = createRouter({
@@ -69,6 +70,59 @@ const router = createRouter({
     },
 
     {
+      path: '/m/login',
+      name: 'm-login',
+      component: () => import('@/mobile/views/LoginView.vue'),
+    },
+    {
+      path: '/m',
+      component: () => import('@/mobile/MobileShell.vue'),
+      meta: { requireAuth: true },
+      children: [
+        {
+          path: '',
+          name: 'm-home',
+          component: () => import('@/mobile/views/HomeView.vue'),
+        },
+        {
+          path: 'items/:id',
+          name: 'm-detail',
+          component: () => import('@/mobile/views/DetailView.vue'),
+        },
+        {
+          path: 'publish',
+          name: 'm-publish',
+          component: () => import('@/mobile/views/PublishView.vue'),
+        },
+        {
+          path: 'my-posts',
+          name: 'm-my-posts',
+          component: () => import('@/mobile/views/MyPostsView.vue'),
+        },
+        {
+          path: 'messages',
+          name: 'm-messages',
+          component: () => import('@/mobile/views/MessagesView.vue'),
+        },
+        {
+          path: 'messages/:peerId',
+          name: 'm-chat',
+          component: () => import('@/mobile/views/ChatView.vue'),
+        },
+        {
+          path: 'settings',
+          name: 'm-settings',
+          component: () => import('@/mobile/views/SettingsView.vue'),
+        },
+        {
+          path: 'admins',
+          name: 'm-admins',
+          component: () => import('@/mobile/views/AdminsView.vue'),
+        },
+      ],
+    },
+
+    {
       path: '/admin',
       component: AdminLayout,
       meta: { requireAuth: true, roles: ['admin'] },
@@ -88,19 +142,44 @@ const router = createRouter({
 })
 
 router.beforeEach((to) => {
+  const phone = isMobileViewport()
+  if (phone && to.path !== '/m' && !to.path.startsWith('/m/')) {
+    return toMobileLocation(to.fullPath)
+  }
+  if (!phone && (to.path === '/m' || to.path.startsWith('/m/'))) {
+    return toDesktopLocation(to.fullPath)
+  }
+
   const token = localStorage.getItem(STORAGE_KEYS.token)
   const role = localStorage.getItem(STORAGE_KEYS.role)
+  const onLogin = to.path === ROUTE_LOGIN || to.path === '/m/login'
+
+  if (onLogin && token) {
+    if (phone) return '/m'
+    return role === 'admin' ? ROUTE_ADMIN_ITEMS : '/'
+  }
 
   if (to.meta.requireAuth && !token) {
-    return { path: ROUTE_LOGIN, query: { redirect: to.fullPath } }
+    return { path: phone ? '/m/login' : ROUTE_LOGIN, query: { redirect: to.fullPath } }
   }
 
   const roles = to.meta.roles as string[] | undefined
   if (roles && !roles.includes(role ?? '')) {
-    return { path: '/' }
+    return phone ? '/m' : '/'
   }
 
   return true
 })
+
+if (typeof window !== 'undefined' && window.matchMedia) {
+  const media = window.matchMedia(MOBILE_MEDIA)
+  const syncViewport = () => {
+    const current = router.currentRoute.value.fullPath
+    const next = media.matches ? toMobileLocation(current) : toDesktopLocation(current)
+    if (next !== current) void router.replace(next)
+  }
+  if (media.addEventListener) media.addEventListener('change', syncViewport)
+  else media.addListener(syncViewport)
+}
 
 export default router

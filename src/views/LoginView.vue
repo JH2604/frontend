@@ -3,11 +3,17 @@ import { computed, reactive, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { login, register } from '@/api/auth'
-import { getMyProfile } from '@/api/user'
 import { useUserStore } from '@/stores/user'
-import { PASSWORD_RULE_TEXT, Role, type RoleValue } from '@/utils/contract'
-import { syncThemeFromServer } from '@/utils/theme'
-const PASSWORD_REGEX = /^(?=.*[A-Za-z])(?=.*\d)\S{8,32}$/
+import {
+  isValidStudentId,
+  PASSWORD_MAX,
+  PASSWORD_REGEX,
+  PASSWORD_RULE_TEXT,
+  Role,
+  STUDENT_ID_RULE_TEXT,
+  type RoleValue,
+} from '@/utils/contract'
+
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
@@ -29,8 +35,8 @@ const rules = computed<FormRules>(() => ({
     { required: true, message: '请输入学号', trigger: 'blur' },
     {
       validator: (_rule, value: string, callback) => {
-        if (value === 'admin' || /^\d+$/.test(value)) callback()
-        else callback(new Error('学号必须为数字'))
+        if (isValidStudentId(value)) callback()
+        else callback(new Error(STUDENT_ID_RULE_TEXT))
       },
       trigger: 'blur',
     },
@@ -41,7 +47,10 @@ const rules = computed<FormRules>(() => ({
           { required: true, message: '请输入密码', trigger: 'blur' },
           { pattern: PASSWORD_REGEX, message: PASSWORD_RULE_TEXT, trigger: 'blur' },
         ]
-      : [{ required: true, message: '请输入密码', trigger: 'blur' }],
+      : [
+          { required: true, message: '请输入密码', trigger: 'blur' },
+          { max: PASSWORD_MAX, message: `密码最多 ${PASSWORD_MAX} 位`, trigger: 'blur' },
+        ],
   confirmPassword:
     activeTab.value === 'register'
       ? [
@@ -54,6 +63,10 @@ const rules = computed<FormRules>(() => ({
             trigger: 'blur',
           },
         ]
+      : [],
+  role:
+    activeTab.value === 'register'
+      ? [{ required: true, message: '请选择角色', trigger: 'change' }]
       : [],
 }))
 
@@ -114,7 +127,7 @@ async function handleSubmit() {
           <el-input
             v-model="form.password"
             type="password"
-            placeholder="密码（8~32 位，含字母和数字）"
+            :placeholder="activeTab === 'register' ? PASSWORD_RULE_TEXT : '密码'"
             show-password
             @keyup.enter="handleSubmit"
           />

@@ -1,31 +1,25 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import type { Theme, UserMe } from '@/types/api'
-import {
-  bindContact,
-  changeMyPassword,
-  getMyProfile,
-  sendVerificationCode,
-  updateMe,
-} from '@/api/user'
-import ImageUploader from '@/components/ImageUploader.vue'
+import { uploadFile } from '@/api/file'
+import { bindContact, changeMyPassword, getMyProfile, sendVerificationCode, updateMe } from '@/api/user'
 import { useUserStore } from '@/stores/user'
 import {
   AVATAR_MAX_MB,
   ContactChannel,
-  type ContactChannelValue,
+  EMAIL_REGEX,
+  PASSWORD_REGEX,
   PASSWORD_RULE_TEXT,
   ROUTE_LOGIN,
   ROUTE_SETTINGS,
-  UploadUsage,
   VERIFICATION_CODE_LENGTH,
   maskEmail,
   maskPhone,
 } from '@/utils/contract'
 import { formatDateTime, fromNow } from '@/utils/format'
-import { setThemeLocal, syncThemeFromServer } from '@/utils/theme'
+import { setThemeLocal, themePreference } from '@/utils/theme'
 
 defineOptions({ name: 'Settings' })
 
@@ -41,14 +35,10 @@ const themeOptions: { label: string; value: Theme }[] = [
   { label: '跟随系统', value: 'system' },
 ]
 
-const theme = ref<Theme>('system')
-const savingTheme = ref(false)
+const theme = ref<Theme>(themePreference.value)
 
-const avatarList = ref<string[]>([])
-const savingAvatar = ref(false)
-
-const allowRemind = ref(true)
-const savingRemind = ref(false)
+const avatarInput = ref<HTMLInputElement | null>(null)
+const avatarUploading = ref(false)
 
 const pwdFormRef = ref<FormInstance>()
 const pwdForm = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' })
@@ -58,14 +48,14 @@ const pwdRules: FormRules = {
   oldPassword: [{ required: true, message: '请输入原密码', trigger: 'blur' }],
   newPassword: [
     { required: true, message: '请输入新密码', trigger: 'blur' },
-
     {
-      pattern: /^(?=.*[A-Za-z])(?=.*\d)[\S]{8,32}$/,
+      pattern: PASSWORD_REGEX,
       message: PASSWORD_RULE_TEXT,
       trigger: 'blur',
     },
   ],
   confirmPassword: [
+    { required: true, message: '请再次输入新密码', trigger: 'blur' },
     {
       validator: (_rule, value: string, callback) => {
         if (value !== pwdForm.newPassword) callback(new Error('两次输入的新密码不一致'))
@@ -76,40 +66,11 @@ const pwdRules: FormRules = {
   ],
 }
 
-const contactFormRef = ref<FormInstance>()
-const contactForm = reactive({
-  channel: ContactChannel.SMS as ContactChannelValue,
-  target: '',
-  code: '',
-})
-const codeSent = ref(false)
-const sendingCode = ref(false)
-
-const countdown = ref(0)
-let countdownTimer: number | undefined
-const bindingContact = ref(false)
-
-const contactRules: FormRules = {
-  target: [{ required: true, message: '请输入手机号或邮箱', trigger: 'blur' }],
-  code: [{ required: true, message: '请输入验证码', trigger: 'blur' }],
-}
-
-const targetLabel = computed(() => (contactForm.channel === ContactChannel.SMS ? '手机号' : '邮箱'))
-const targetPlaceholder = computed(() =>
-  contactForm.channel === ContactChannel.SMS ? '11 位手机号' : '例如 zhangsan@example.com',
-)
-
 async function fetchMe() {
   loading.value = true
   try {
     const res = await getMyProfile()
     me.value = res
-    theme.value = res.theme
-    allowRemind.value = res.allowRemind
-
-    avatarList.value = res.avatarUrl ? [res.avatarUrl] : []
-
-    syncThemeFromServer(res.theme)
   } catch {
     me.value = null
   } finally {
@@ -119,56 +80,79 @@ async function fetchMe() {
 
 function handleThemeRadioChange(next: string | number | boolean | undefined) {
   if (next !== 'light' && next !== 'dark' && next !== 'system') return
-  void handleThemeChange(next)
-}
-
-async function handleThemeChange(next: Theme) {
   setThemeLocal(next)
   theme.value = next
-  savingTheme.value = true
+}
+
+const emailForm = reactive({ target: '', code: '' })
+const codeSending = ref(false)
+const binding = ref(false)
+const countdown = ref(0)
+const sentTarget = ref('')
+let countdownTimer: ReturnType<typeof setInterval> | undefined
+
+function clearCountdown() {
+  if (!countdownTimer) return
+  clearInterval(countdownTimer)
+  countdownTimer = undefined
+}
+
+function startCountdown(seconds: number) {
+  clearCountdown()
+  countdown.value = seconds
+  countdownTimer = setInterval(() => {
+    countdown.value -= 1
+    if (countdown.value <= 0) clearCountdown()
+  }, 1000)
+}
+
+async function handleSendEmailCode() {
+  const target = emailForm.target.trim()
+  if (!EMAIL_REGEX.test(target)) {
+    ElMessage.warning('请输入正确的邮箱')
+    return
+  }
+
+  codeSending.value = true
   try {
-    await updateMe({ theme: next })
-    ElMessage.success('主题已保存')
+    await sendVerificationCode({ channel: ContactChannel.EMAIL, target })
+    sentTarget.value = target
+    startCountdown(60)
+    ElMessage.success('验证码已发送，10 分钟内有效')
   } catch {
+    // 提示已由拦截器弹出
   } finally {
-    savingTheme.value = false
+    codeSending.value = false
   }
 }
 
-async function handleAvatarChange(urls: string[]) {
-  const url = urls[0]
-  if (!url || url === me.value?.avatarUrl) return
-
-  savingAvatar.value = true
-  try {
-    const res = await updateMe({ avatarUrl: url })
-    me.value = res
-    ElMessage.success('头像已更新')
-  } catch {
-    avatarList.value = me.value?.avatarUrl ? [me.value.avatarUrl] : []
-  } finally {
-    savingAvatar.value = false
+async function handleBindEmail() {
+  const target = emailForm.target.trim()
+  const code = emailForm.code.trim()
+  if (!EMAIL_REGEX.test(target)) {
+    ElMessage.warning('请输入正确的邮箱')
+    return
   }
-}
+  if (!new RegExp(`^\\d{${VERIFICATION_CODE_LENGTH}}$`).test(code)) {
+    ElMessage.warning(`请输入 ${VERIFICATION_CODE_LENGTH} 位验证码`)
+    return
+  }
+  if (sentTarget.value && target !== sentTarget.value) {
+    ElMessage.warning('邮箱已修改，请重新获取验证码')
+    return
+  }
 
-watch(avatarList, (urls) => {
-  handleAvatarChange(urls)
-})
-
-function handleRemindSwitchChange(v: string | number | boolean | undefined) {
-  void handleAllowRemindChange(v === true)
-}
-
-async function handleAllowRemindChange(next: boolean) {
-  savingRemind.value = true
+  binding.value = true
   try {
-    const res = await updateMe({ allowRemind: next })
-    me.value = res
-    ElMessage.success(next ? '已开启私信提醒' : '已关闭私信提醒')
+    await bindContact({ channel: ContactChannel.EMAIL, target, code })
+    ElMessage.success('邮箱已绑定')
+    emailForm.code = ''
+    sentTarget.value = ''
+    await fetchMe()
   } catch {
-    allowRemind.value = !next
+    // 提示已由拦截器弹出
   } finally {
-    savingRemind.value = false
+    binding.value = false
   }
 }
 
@@ -192,69 +176,33 @@ async function handleChangePassword() {
   }
 }
 
-async function handleSendCode() {
-  const target = contactForm.target.trim()
-  if (!target) {
-    ElMessage.warning(`请先填写${targetLabel.value}`)
+async function onAvatar(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+    ElMessage.warning('只支持 JPEG / PNG / WebP')
     return
   }
-
-  sendingCode.value = true
-  try {
-    await sendVerificationCode({ channel: contactForm.channel, target })
-    codeSent.value = true
-    ElMessage.success(`验证码已发送到${targetLabel.value}（演示环境固定为 123456）`)
-
-    countdown.value = 60
-    countdownTimer = window.setInterval(() => {
-      countdown.value -= 1
-      if (countdown.value <= 0 && countdownTimer !== undefined) {
-        window.clearInterval(countdownTimer)
-        countdownTimer = undefined
-      }
-    }, 1000)
-  } catch {
-  } finally {
-    sendingCode.value = false
-  }
-}
-
-function handleChannelChange() {
-  contactForm.target = ''
-  contactForm.code = ''
-  codeSent.value = false
-}
-
-async function handleBindContact() {
-  const valid = await contactFormRef.value?.validate().catch(() => false)
-  if (!valid) return
-  if (!codeSent.value) {
-    ElMessage.warning('请先获取验证码')
+  if (file.size > AVATAR_MAX_MB * 1024 * 1024) {
+    ElMessage.warning(`头像不能超过 ${AVATAR_MAX_MB}MB`)
     return
   }
-
-  bindingContact.value = true
+  avatarUploading.value = true
   try {
-    const res = await bindContact({
-      channel: contactForm.channel,
-      target: contactForm.target.trim(),
-      code: contactForm.code.trim(),
-    })
-    ElMessage.success('绑定成功')
-
-    if (me.value) {
-      me.value.phone = res.phone
-      me.value.email = res.email
-    }
-    contactForm.code = ''
-    codeSent.value = false
+    const uploaded = await uploadFile(file, 'avatar')
+    me.value = await updateMe({ avatarUrl: uploaded.url })
+    ElMessage.success('头像已更新')
   } catch {
+    // 提示已由拦截器弹出
   } finally {
-    bindingContact.value = false
+    avatarUploading.value = false
   }
 }
 
 onMounted(fetchMe)
+onUnmounted(clearCountdown)
 </script>
 
 <template>
@@ -264,27 +212,34 @@ onMounted(fetchMe)
     <el-card v-if="me">
       <div class="profile">
         <div class="avatar-block">
-          <ImageUploader
-            v-model="avatarList"
-            :limit="1"
-            :usage="UploadUsage.AVATAR"
-            :max-mb="AVATAR_MAX_MB"
+          <button type="button" class="avatar-btn" :disabled="avatarUploading" @click="avatarInput?.click()">
+            <el-avatar :size="96" :src="me.avatarUrl">
+              {{ me.name.slice(0, 1) }}
+            </el-avatar>
+          </button>
+          <div class="hint block-hint">点击更换头像</div>
+          <input
+            ref="avatarInput"
+            hidden
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            @change="onAvatar"
           />
-          <div v-if="savingAvatar" class="saving">头像保存中…</div>
         </div>
 
         <el-descriptions :column="1" border class="info">
           <el-descriptions-item label="姓名">
             {{ me.name }}
-            <span class="hint">（实名，不可修改）</span>
+            <span class="hint">不可修改</span>
           </el-descriptions-item>
           <el-descriptions-item label="学号">
             {{ me.studentId }}
-            <span class="hint">（不可修改）</span>
+            <span class="hint">不可修改</span>
           </el-descriptions-item>
           <el-descriptions-item label="手机号">
             <span v-if="me.phone" :title="me.phone">{{ maskPhone(me.phone) }}</span>
             <span v-else class="hint">未绑定</span>
+            <span class="hint">短信验证码当前版本暂不支持（审批太麻烦啦）</span>
           </el-descriptions-item>
           <el-descriptions-item label="邮箱">
             <span v-if="me.email" :title="me.email">{{ maskEmail(me.email) }}</span>
@@ -302,79 +257,50 @@ onMounted(fetchMe)
       <div class="section-title">外观与提醒</div>
       <el-form label-width="120px">
         <el-form-item label="主题">
-          <el-radio-group
-            :model-value="theme"
-            :disabled="savingTheme"
-            @change="handleThemeRadioChange"
-          >
+          <el-radio-group :model-value="theme" @change="handleThemeRadioChange">
             <el-radio-button v-for="o in themeOptions" :key="o.value" :value="o.value">
               {{ o.label }}
             </el-radio-button>
           </el-radio-group>
-          <span class="hint">切换立即生效，并会保存到账号上（换设备也保持）</span>
         </el-form-item>
 
         <el-form-item label="私信提醒">
-          <el-switch
-            v-model="allowRemind"
-            :loading="savingRemind"
-            @change="handleRemindSwitchChange"
-          />
-          <span class="hint">关闭后，别人给你发私信时系统不会用短信 / 邮件提醒你</span>
+          <el-switch :model-value="me.allowRemind" disabled />
+          <span class="hint">
+            当前是 {{ me.allowRemind ? '开启' : '关闭' }}
+          </span>
         </el-form-item>
       </el-form>
 
       <el-divider />
 
-      <div class="section-title">绑定手机号 / 邮箱</div>
-      <el-form
-        ref="contactFormRef"
-        :model="contactForm"
-        :rules="contactRules"
-        label-width="120px"
-        class="contact-form"
-      >
-        <el-form-item label="类型">
-          <el-radio-group v-model="contactForm.channel" @change="handleChannelChange">
-            <el-radio-button :value="ContactChannel.SMS">手机号</el-radio-button>
-            <el-radio-button :value="ContactChannel.EMAIL">邮箱</el-radio-button>
-          </el-radio-group>
+      <div class="section-title">绑定邮箱</div>
+      <el-form label-width="120px" class="pwd-form" @submit.prevent>
+        <el-form-item label="邮箱">
+          <div class="bind-row">
+            <el-input v-model="emailForm.target" placeholder="新的邮箱地址" clearable />
+            <el-button
+              :disabled="countdown > 0"
+              :loading="codeSending"
+              @click="handleSendEmailCode"
+            >
+              {{ countdown > 0 ? `${countdown}s 后重发` : '获取验证码' }}
+            </el-button>
+          </div>
         </el-form-item>
-
-        <el-form-item :label="targetLabel" prop="target">
+        <el-form-item label="验证码">
           <el-input
-            v-model="contactForm.target"
-            :placeholder="targetPlaceholder"
-            :disabled="codeSent"
-            style="width: 280px"
-          />
-          <el-button
-            class="code-btn"
-            :loading="sendingCode"
-            :disabled="countdown > 0"
-            @click="handleSendCode"
-          >
-            {{ countdown > 0 ? `${countdown} 秒后可重发` : '获取验证码' }}
-          </el-button>
-
-          <span v-if="codeSent" class="hint">
-            已发送验证码。修改{{ targetLabel }}需要重新获取验证码
-          </span>
-        </el-form-item>
-
-        <el-form-item label="验证码" prop="code">
-          <el-input
-            v-model="contactForm.code"
+            v-model="emailForm.code"
             :maxlength="VERIFICATION_CODE_LENGTH"
             placeholder="6 位验证码"
-            style="width: 160px"
+            clearable
           />
         </el-form-item>
-
         <el-form-item>
-          <el-button type="primary" :loading="bindingContact" @click="handleBindContact">
-            保存绑定
+          <el-button type="primary" :loading="binding" @click="handleBindEmail">
+            {{ me.email ? '修改邮箱' : '绑定邮箱' }}
           </el-button>
+          <span class="hint">验证码 10 分钟内有效，60 秒后可以重发</span>
         </el-form-item>
       </el-form>
 
@@ -406,7 +332,7 @@ onMounted(fetchMe)
           <el-button type="danger" :loading="pwdLoading" @click="handleChangePassword">
             修改密码
           </el-button>
-          <span class="hint">改完所有设备都会下线，需要重新登录</span>
+          <span class="hint">修改密码后所有设备均下线，需重新登录</span>
         </el-form-item>
       </el-form>
     </el-card>
@@ -435,14 +361,15 @@ onMounted(fetchMe)
   flex-shrink: 0;
 }
 
-.info {
-  flex: 1;
+.avatar-btn {
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
 }
 
-.saving {
-  margin-top: 6px;
-  font-size: 12px;
-  color: var(--color-sub);
+.info {
+  flex: 1;
 }
 
 .section-title {
@@ -456,13 +383,19 @@ onMounted(fetchMe)
   color: var(--color-sub);
 }
 
-.contact-form,
+.block-hint {
+  display: block;
+  margin: 8px 0 0;
+}
+
 .pwd-form {
   max-width: 620px;
 }
 
-.code-btn {
-  margin-left: 8px;
+.bind-row {
+  display: flex;
+  gap: 8px;
+  width: 100%;
 }
 
 .route-note {

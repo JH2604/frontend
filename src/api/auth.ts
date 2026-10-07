@@ -45,14 +45,18 @@ function readTokenPayload(token: string): { role: RoleValue; userId?: number } {
 
     const bytes = Uint8Array.from(atob(padded), (c) => c.charCodeAt(0))
     const payload = JSON.parse(new TextDecoder().decode(bytes)) as {
+      sub?: string | number
       role?: string
       user_id?: number
       userId?: number
     }
 
+    const rawId = payload.sub ?? payload.user_id ?? payload.userId
+    const userId = typeof rawId === 'number' ? rawId : Number(rawId)
+
     return {
       role: payload.role === Role.ADMIN ? Role.ADMIN : Role.STUDENT,
-      userId: payload.user_id ?? payload.userId,
+      userId: Number.isFinite(userId) && userId > 0 ? userId : undefined,
     }
   } catch {
     return { role: Role.STUDENT }

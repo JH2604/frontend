@@ -29,6 +29,12 @@ defineExpose({ uploading })
 
 async function doUpload(options: UploadRequestOptions) {
   const file = options.file
+  const allowed = ['image/jpeg', 'image/png', 'image/webp']
+  if (!allowed.includes(file.type)) {
+    const msg = '只支持 JPEG / PNG / WebP'
+    ElMessage.error(msg)
+    throw new Error(msg)
+  }
 
   if (file.size > props.maxMb * 1024 * 1024) {
     const msg = `图片不能超过 ${props.maxMb}MB`

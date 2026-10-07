@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import type { UserProfile } from '@/types/api'
 import { getUserProfile } from '@/api/user'
+import { useUserStore } from '@/stores/user'
 import { Role, messageChatPath } from '@/utils/contract'
 import { formatDateTime, fromNow } from '@/utils/format'
 
@@ -15,13 +16,14 @@ const props = defineProps<{
 const open = defineModel<boolean>({ default: false })
 
 const router = useRouter()
+const userStore = useUserStore()
 
 const loading = ref(false)
 const profile = ref<UserProfile | null>(null)
 
 const detail = computed(() => profile.value?.detail ?? null)
 
-const isSelf = computed(() => profile.value?.id === props.userId && !!props.userId)
+const isSelf = computed(() => !!profile.value && profile.value.id === userStore.userId)
 
 async function fetchProfile() {
   if (!props.userId) {
